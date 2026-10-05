@@ -1,0 +1,1151 @@
+import { EP_BATCH_2_INSTRUMENTS, EP_BATCH_3_INSTRUMENTS } from './epCodebookInstruments.js';
+import { EP_BATCH_4_INSTRUMENTS } from './epBatch4Instruments.js';
+import { CLIENT_PROFILE_INSTRUMENTS } from './clientProfileInstruments.js';
+
+export const LEGACY_INSTRUMENT = {
+  version: "Demo check-in v1.0",
+  respondents: ["Person", "Family respondent"],
+  sections: [{ id: "preferences", title: "Taking part" }],
+  questions: [
+    {
+      section: "preferences",
+      id: "participation",
+      title: "How would you prefer to take part?",
+      family: "How would you prefer to share your perspective?",
+      hint: "Choose the option that feels most comfortable for you.",
+      options: [
+        "In person",
+        "On my own device",
+        "Together with a staff member",
+        "Prefer not to answer",
+      ],
+    },
+    {
+      section: "preferences",
+      id: "support",
+      title: "Would you like support with the questions?",
+      hint: "It’s okay to ask for help or take a break.",
+      options: [
+        "I’m comfortable on my own",
+        "A little support",
+        "I’d like someone alongside me",
+        "Prefer not to answer",
+      ],
+    },
+    {
+      section: "preferences",
+      id: "next",
+      title: "What would you like to talk about next?",
+      hint: "This sample question helps demonstrate how answers reach the care team.",
+      options: [
+        "My next steps",
+        "How taking part works",
+        "Support available to me",
+        "Prefer not to answer",
+      ],
+    },
+  ],
+};
+
+const choice = (
+  id,
+  section,
+  title,
+  options,
+  when,
+  hint = "Choose what works for you. You can also choose not to answer.",
+) => ({
+  id,
+  section,
+  title,
+  hint,
+  options: [...options, "Prefer not to answer"],
+  ...(when ? { when } : {}),
+});
+const when = (questionId, ...oneOf) => ({ questionId, oneOf });
+
+const PREFER_NOT_TO_ANSWER = "Prefer not to answer";
+const FREQUENCY_SCALE = {
+  label: "Five-point frequency scale",
+  instruction: "Choose one answer from Never to Always.",
+  options: ["Never", "Rarely", "Sometimes", "Often", "Always"],
+};
+const AGREEMENT_SCALE = {
+  label: "Five-point agreement scale",
+  instruction: "Choose one answer from Strongly disagree to Strongly agree.",
+  options: [
+    "Strongly disagree",
+    "Disagree",
+    "Neither agree nor disagree",
+    "Agree",
+    "Strongly agree",
+  ],
+};
+const likert = (id, section, title, scale, hint, nonResponseOptions = []) => ({
+  id,
+  section,
+  title,
+  hint,
+  responseType: "likert",
+  scale: { ...scale, options: [...scale.options] },
+  nonResponseOptions: [...nonResponseOptions, PREFER_NOT_TO_ANSWER],
+  options: [...scale.options, ...nonResponseOptions, PREFER_NOT_TO_ANSWER],
+});
+
+// Original, nonclinical sample content. Rules reference stable IDs of earlier
+// questions; array positions are fixed within a pinned version for stored answers.
+export const DEMO_INSTRUMENT = {
+  name: "Your preferences and next steps",
+  version: "Your preferences and next steps v2.0",
+  description: "Participation preferences, everyday activities and next steps.",
+  respondents: ["Person", "Family respondent"],
+  sections: [
+    { id: "preferences", title: "Taking part" },
+    { id: "support", title: "Support with questions" },
+    { id: "routine", title: "Everyday activities" },
+    { id: "connection", title: "People and connection" },
+    { id: "next", title: "Your next steps" },
+  ],
+  questions: [
+    choice(
+      "participation",
+      "preferences",
+      "How would you prefer to take part?",
+      ["In person", "On my own device", "Together with a staff member"],
+    ),
+    choice(
+      "device",
+      "preferences",
+      "Can you use a device when you want to take part?",
+      ["Yes", "Sometimes", "I need help arranging one"],
+      when("participation", "On my own device"),
+    ),
+    choice(
+      "device-help",
+      "preferences",
+      "What would help you access a device?",
+      [
+        "A device at the centre",
+        "Help setting up my device",
+        "Talk through the options",
+      ],
+      when("device", "Sometimes", "I need help arranging one"),
+    ),
+    choice("pace", "preferences", "What pace would suit you?", [
+      "One sitting",
+      "Short sections with breaks",
+      "Decide as I go",
+    ]),
+    choice(
+      "breaks",
+      "preferences",
+      "When would you prefer a break?",
+      ["After each section", "Whenever I ask", "Check with me along the way"],
+      when("pace", "Short sections with breaks"),
+    ),
+    choice("support", "support", "Would you like support with the questions?", [
+      "I’m comfortable on my own",
+      "A little support",
+      "I’d like someone alongside me",
+    ]),
+    choice(
+      "support-kind",
+      "support",
+      "What kind of support would help?",
+      [
+        "Reading the questions together",
+        "Explaining the answer options",
+        "Someone to keep me company",
+      ],
+      when("support", "A little support", "I’d like someone alongside me"),
+    ),
+    choice(
+      "support-reader",
+      "support",
+      "How would you like the questions read?",
+      [
+        "Read each question aloud",
+        "Only read the ones I ask about",
+        "Let me read first, then check together",
+      ],
+      when("support-kind", "Reading the questions together"),
+    ),
+    choice(
+      "clarity",
+      "support",
+      "How would you like unfamiliar words explained?",
+      ["Use an example", "Use simpler words", "Let me ask when I need to"],
+    ),
+    choice("setting", "support", "What setting would feel comfortable?", [
+      "A quiet space",
+      "A familiar space",
+      "No particular preference",
+    ]),
+    choice(
+      "activities",
+      "routine",
+      "Are there everyday activities you would like to discuss?",
+      [
+        "Learning or work",
+        "Hobbies and free time",
+        "Managing my routine",
+        "Nothing for now",
+      ],
+    ),
+    choice(
+      "learning",
+      "routine",
+      "What would you like to discuss about learning or work?",
+      ["Getting started", "Keeping a routine", "Asking for support"],
+      when("activities", "Learning or work"),
+    ),
+    choice(
+      "hobbies",
+      "routine",
+      "What would you like to discuss about hobbies?",
+      ["Finding something to try", "Making time", "Joining others"],
+      when("activities", "Hobbies and free time"),
+    ),
+    choice(
+      "routine-help",
+      "routine",
+      "What would help with your routine?",
+      ["Planning the week", "Reminders", "Taking one step at a time"],
+      when("activities", "Managing my routine"),
+    ),
+    choice(
+      "strength",
+      "routine",
+      "What helps you make time for things you enjoy?",
+      [
+        "Planning ahead",
+        "Doing things with someone",
+        "Keeping things flexible",
+        "I’m still working this out",
+      ],
+    ),
+    choice(
+      "connection",
+      "connection",
+      "Would you like to involve someone in your next conversation?",
+      ["Yes", "Not right now", "I’m not sure"],
+    ),
+    choice(
+      "who",
+      "connection",
+      "Who would you like to involve?",
+      ["A family member", "A friend or trusted person", "A staff member"],
+      when("connection", "Yes"),
+    ),
+    choice(
+      "involvement",
+      "connection",
+      "How would you like them to take part?",
+      [
+        "Join the whole conversation",
+        "Join for part of it",
+        "Help me prepare beforehand",
+      ],
+      {
+        all: [
+          when("connection", "Yes"),
+          when("who", "A family member", "A friend or trusted person"),
+        ],
+      },
+    ),
+    choice(
+      "connection-info",
+      "connection",
+      "What would help you decide about involving someone?",
+      [
+        "Know what they would be asked",
+        "Discuss it with staff first",
+        "More time to think",
+      ],
+      when("connection", "I’m not sure"),
+    ),
+    choice(
+      "conversation",
+      "connection",
+      "How do you prefer to start a conversation?",
+      ["Let me start", "Ask me a question", "Look at my answers together"],
+    ),
+    choice("next", "next", "What would you like to talk about next?", [
+      "My next steps",
+      "How taking part works",
+      "Support available to me",
+    ]),
+    choice(
+      "next-help",
+      "next",
+      "What would you like to understand about available support?",
+      ["What the options involve", "How to get started", "Who I can ask"],
+      {
+        any: [
+          when("next", "Support available to me"),
+          when("support", "I’d like someone alongside me"),
+        ],
+      },
+    ),
+    choice(
+      "takeaway",
+      "next",
+      "What would you like to take away from the next conversation?",
+      [
+        "One clear next step",
+        "A summary to look back at",
+        "Time to think about the options",
+      ],
+    ),
+    choice("ending", "next", "How would you like the conversation to end?", [
+      "Check I have understood",
+      "Agree the next step together",
+      "Let me ask any final questions",
+    ]),
+  ],
+};
+DEMO_INSTRUMENT.questions[0].family =
+  "How would you prefer to share your perspective?";
+
+// Original, unscored sample content for demonstrating ordinal response scales.
+// It is not a validated outcome measure and has no score or clinical threshold.
+export const LIKERT_INSTRUMENT = {
+  name: "Life and care check-in",
+  version: "Life and care check-in v1.0",
+  description:
+    "Reflect on everyday life, connection and a recent care conversation.",
+  introduction:
+    "Your care team would like to hear how everyday life and your recent care experience have felt to you.",
+  timeframe: "Past 2 weeks, with a separate recent-care section",
+  responseFormat: "Two verbal five-point Likert scales",
+  respondents: ["Person"],
+  sections: [
+    { id: "daily-life", title: "Everyday life" },
+    { id: "connection", title: "Support and connection" },
+    { id: "care", title: "Your care experience" },
+  ],
+  questions: [
+    likert(
+      "routine-worked",
+      "daily-life",
+      "In the past 2 weeks, how often did your daily routine work well enough for you?",
+      FREQUENCY_SCALE,
+      "Think about the routine that matters to you, not what other people expect.",
+    ),
+    likert(
+      "meaningful-activity",
+      "daily-life",
+      "In the past 2 weeks, how often could you do something that mattered to you?",
+      FREQUENCY_SCALE,
+      "This could be learning, work, culture, family time, rest, or an activity you enjoy.",
+    ),
+    likert(
+      "felt-connected",
+      "connection",
+      "In the past 2 weeks, how often did you feel connected to people who matter to you?",
+      FREQUENCY_SCALE,
+      "Think about the relationships that are important to you.",
+    ),
+    likert(
+      "support-available",
+      "connection",
+      "In the past 2 weeks, how often did you have support when you needed it?",
+      FREQUENCY_SCALE,
+      "Support may come from family, friends, community, or services.",
+    ),
+    likert(
+      "felt-heard",
+      "care",
+      "I felt heard when I shared what mattered to me.",
+      AGREEMENT_SCALE,
+      "Think about your most recent care conversation.",
+      ["I have not had a care conversation"],
+    ),
+    likert(
+      "understood-next",
+      "care",
+      "I understood what would happen next in my care.",
+      AGREEMENT_SCALE,
+      "Think about your most recent care conversation.",
+      ["No next steps were discussed", "I have not had a care conversation"],
+    ),
+  ],
+};
+
+// These are original, unscored prototype questionnaires, not clinical measures.
+// Each version owns its question order; keep published versions unchanged.
+const sampleInstrument = (name, description, sections, questions) => ({
+  name,
+  version: `${name} v1.0`,
+  description,
+  respondents: ["Person"],
+  sections: sections.map(([id, title]) => ({ id, title })),
+  questions,
+});
+
+// An original, unscored starting-point questionnaire for a new care episode.
+// The family wording keeps the same answer IDs when the intake respondent is a family member.
+export const INITIAL_ASSESSMENT_INSTRUMENT = {
+  name: "Initial assessment",
+  version: "Initial assessment v1.0",
+  description: "Explore what matters now, everyday life, support and a useful first step.",
+  respondents: ["Person", "Family respondent"],
+  sections: [
+    { id: "priorities", title: "What matters now" },
+    { id: "daily-life", title: "Everyday life" },
+    { id: "support", title: "Support and next steps" },
+  ],
+  questions: [
+    {
+      ...choice("starting-priority", "priorities", "What would you most like help with at the start of care?", ["Understanding care options", "Everyday routines", "People and relationships", "Planning next steps", "Something else", "Not sure yet"]),
+      family: "What would the person you support most like help with at the start of care?",
+    },
+    {
+      ...choice("what-works", "priorities", "What is working well for you right now?", ["Daily routine", "Support from others", "Time for enjoyable activities", "Still working this out"]),
+      family: "What seems to be working well for the person you support right now?",
+    },
+    {
+      ...choice("daily-life", "daily-life", "How are everyday activities going for you right now?", ["Mostly manageable", "Some parts are difficult", "Many parts are difficult", "I am not sure"]),
+      family: "How do everyday activities seem to be going for the person you support?",
+    },
+    {
+      ...choice("daily-life-focus", "daily-life", "Which part of everyday life would you like to talk about first?", ["Learning or work", "Home and routine", "Friends and family", "Interests and free time", "Something else"]),
+      family: "Which part of everyday life would be useful to talk about first?",
+    },
+    {
+      ...choice("involve-someone", "support", "Would you like someone involved in planning your care?", ["Yes", "Not right now", "I am not sure"]),
+      family: "Would the person you support like someone involved in planning their care?",
+    },
+    {
+      ...choice("involvement", "support", "How would you like them to take part?", ["Join a conversation", "Help prepare for a conversation", "Share an update with consent", "Talk about the options first"], when("involve-someone", "Yes")),
+      family: "How might that person take part?",
+    },
+    {
+      ...choice("first-step", "support", "What would be a useful first step for you?", ["Talk through priorities", "Make a simple plan", "Find practical support", "Learn more about available care", "Not sure yet"]),
+      family: "What might be a useful first step for the person you support?",
+    },
+  ],
+};
+
+export const NINETY_DAY_REVIEW_INSTRUMENT = sampleInstrument(
+  "90-day review",
+  "An unscored check-in on progress, support and next steps at a care review.",
+  [["progress", "Looking back"], ["support", "Support now"], ["next", "Looking ahead"]],
+  [
+    choice("review-change", "progress", "How have things been going since your last check-in?", ["Better", "About the same", "More difficult", "Not sure"]),
+    choice("review-helpful", "progress", "What has been most helpful recently?", ["Conversations with staff", "Support from people around me", "Practical help", "Trying my own steps", "I am not sure yet"]),
+    choice("review-goals", "progress", "How do you feel about the steps you wanted to take?", ["I have made progress", "I have made some progress", "I have not made progress yet", "My priorities have changed", "Not sure"]),
+    choice("review-support", "support", "Does the support you are receiving still fit what you need?", ["Yes", "Some changes would help", "No", "Not sure"]),
+    choice("review-change-support", "support", "What would you like to change about your support?", ["What we focus on", "How often we meet", "How I take part", "Who is involved", "Talk through the options"], when("review-support", "Some changes would help", "No")),
+    choice("review-priority", "next", "What matters most for the next part of your care?", ["Keep working on the same goals", "Choose a new goal", "Get practical support", "Review my options", "Not sure yet"]),
+    choice("review-next", "next", "What would be a useful next step?", ["Agree a small action", "Talk with someone I trust", "Review the care plan together", "Take more time to decide"]),
+  ],
+);
+
+// Fictional staff-completed measures; these contain no licensed scale content.
+export const CLINICIAN_INITIAL_INSTRUMENT = {
+  ...sampleInstrument('Clinician initial assessment', 'A staff summary of initial care needs.',
+    [['review', 'Clinical summary']], [
+      choice('presenting-needs', 'review', 'What is the main care need identified at intake?',
+        ['Assessment', 'Care planning', 'Practical support', 'Further discussion']),
+      choice('next-step', 'review', 'What is the agreed next clinical step?',
+        ['Complete assessment', 'Agree a care plan', 'Arrange follow-up', 'Seek consultation']),
+    ]),
+  respondents: ['Clinician'],
+};
+
+export const CLINICIAN_REVIEW_INSTRUMENT = {
+  ...sampleInstrument('Clinician care review', 'A staff summary of progress and the next care step.',
+    [['review', 'Clinical review']], [
+      choice('progress', 'review', 'How is progress since the last review recorded?',
+        ['Improved', 'Stable', 'More support needed', 'Further assessment needed']),
+      choice('plan', 'review', 'What is the next care plan action?',
+        ['Continue current plan', 'Update care plan', 'Arrange follow-up', 'Seek consultation']),
+    ]),
+  respondents: ['Clinician'],
+};
+
+// Fictional, unscored placeholders for the fixed MVP pathway. Replace these
+// versions only when the approved stream batteries and wording are available.
+export const MVP_STREAM_QUESTIONNAIRES = Object.fromEntries([
+  ["Psychosis", "Psychosis stream check-in", "experiences and support"],
+  ["Eating Disorder", "Eating disorder stream check-in", "daily routines and support"],
+  ["Personality", "Personality stream check-in", "coordination and support"],
+  ["Mood", "Mood stream check-in", "mood and support"],
+].map(([stream, name, focus]) => {
+  const questions = [
+    { ...choice("support-fit", "check-in", `How well is the support for ${focus} working for you?`,
+      ["Working well", "Some changes would help", "Not working well", "Not sure"]),
+      family: `How well is the support for ${focus} working for the person you support?` },
+    { ...choice("change", "check-in", "Has anything changed since your last review?",
+      ["Things are easier", "About the same", "Things are harder", "Not sure"]),
+      family: "Has anything changed for the person you support since the last review?" },
+    { ...choice("next-step", "check-in", "What would be most useful to discuss next?",
+      ["Keep the current plan", "Change the plan", "Practical support", "Talk through options"]),
+      family: "What would be most useful to discuss next for the person you support?" },
+  ];
+  return [stream, {
+    ...sampleInstrument(name, `Fictional MVP sample questions about ${focus}; not a clinical measure.`,
+      [["check-in", "Your check-in"]], questions),
+    mvpOnly: true,
+    respondents: ["Person", "Family respondent"],
+  }];
+}));
+
+const LEGACY_SAMPLE_INSTRUMENTS = [
+  INITIAL_ASSESSMENT_INSTRUMENT,
+  DEMO_INSTRUMENT,
+  LIKERT_INSTRUMENT,
+  ...MEASURE_INSTRUMENTS,
+  NINETY_DAY_REVIEW_INSTRUMENT,
+  CLINICIAN_INITIAL_INSTRUMENT,
+  CLINICIAN_REVIEW_INSTRUMENT,
+  ...Object.values(MVP_STREAM_QUESTIONNAIRES),
+  sampleInstrument(
+    "Episode closure assessment",
+    "A final, unscored check-in about progress and support after care ends.",
+    [["progress", "Looking back"], ["next", "What happens next"]],
+    [
+      choice("closure-progress", "progress", "How do things feel compared with when this care episode began?", ["Better", "About the same", "More difficult", "Not sure"]),
+      choice("closure-goals", "progress", "How do you feel about the goals you worked on?", ["I made progress", "I made some progress", "I did not make the progress I hoped for", "Not sure"]),
+      choice("closure-next", "next", "How clear are your next steps?", ["Very clear", "Somewhat clear", "I need more information", "No next steps were agreed"]),
+      choice("closure-support", "next", "Do you know where to ask for support after this episode?", ["Yes", "I would like a reminder", "No", "Not sure"]),
+    ],
+  ),
+  sampleInstrument(
+    "Care experience feedback",
+    "A separate, unscored questionnaire about the experience of care.",
+    [["experience", "Your experience"], ["voice", "Your voice"]],
+    [
+      choice("feedback-listened", "experience", "Did you feel listened to during this care episode?", ["Yes", "Sometimes", "No", "Not sure"]),
+      choice("feedback-involved", "experience", "Were you involved in decisions about your care?", ["Yes", "Sometimes", "No", "Not sure"]),
+      choice("feedback-useful", "voice", "What part of the support was most useful?", ["Conversations with staff", "Practical help", "Planning next steps", "Something else", "Nothing was useful"]),
+      choice("feedback-improve", "voice", "What should we improve?", ["Clearer information", "More choice", "Easier contact", "More time", "Nothing to add"]),
+    ],
+  ),
+  sampleInstrument(
+    "Everyday life",
+    "Explore daily routines, enjoyable activities and practical next steps.",
+    [
+      ["routine", "Your routine"],
+      ["activities", "Making time"],
+      ["next", "Next steps"],
+    ],
+    [
+      choice(
+        "routine",
+        "routine",
+        "How does your daily routine feel at the moment?",
+        [
+          "It works for me",
+          "Some parts work for me",
+          "I would like to make changes",
+        ],
+      ),
+      choice(
+        "routine-change",
+        "routine",
+        "Which part of your routine would you like to discuss?",
+        [
+          "Getting ready for the day",
+          "Making time for activities",
+          "Winding down",
+        ],
+        when(
+          "routine",
+          "Some parts work for me",
+          "I would like to make changes",
+        ),
+      ),
+      choice(
+        "enjoy",
+        "activities",
+        "Are you making time for things you enjoy?",
+        [
+          "As much as I would like",
+          "Some of the time",
+          "Less than I would like",
+        ],
+      ),
+      choice(
+        "activity-help",
+        "activities",
+        "What would help you make more time?",
+        [
+          "Planning a small activity",
+          "Doing something with someone",
+          "Finding something to try",
+        ],
+        when("enjoy", "Some of the time", "Less than I would like"),
+      ),
+      choice(
+        "strength",
+        "activities",
+        "What is already helping your day go well?",
+        [
+          "A familiar routine",
+          "Time with other people",
+          "Time to myself",
+          "I am still working this out",
+        ],
+      ),
+      choice(
+        "next-step",
+        "next",
+        "What would you like to try before your next visit?",
+        [
+          "Keep a routine that works",
+          "Try one small change",
+          "Talk through ideas first",
+          "Nothing new for now",
+        ],
+      ),
+    ],
+  ),
+  sampleInstrument(
+    "Goals and next steps",
+    "Identify a personal priority, a manageable next step and preferred support.",
+    [
+      ["priority", "What matters to you"],
+      ["plan", "Taking a step"],
+      ["review", "Looking ahead"],
+    ],
+    [
+      choice(
+        "priority",
+        "priority",
+        "What would you most like to work towards?",
+        [
+          "A daily routine",
+          "Learning or work",
+          "An activity or interest",
+          "I would like help choosing",
+        ],
+      ),
+      choice(
+        "choose",
+        "priority",
+        "How would you like to explore possible goals?",
+        [
+          "Talk through what matters to me",
+          "Look at a few examples",
+          "Take some time to think",
+        ],
+        when("priority", "I would like help choosing"),
+      ),
+      choice("step", "plan", "Have you chosen a small next step?", [
+        "Yes",
+        "I have a few ideas",
+        "Not yet",
+      ]),
+      choice(
+        "step-help",
+        "plan",
+        "What would help you choose a next step?",
+        [
+          "Breaking an idea into smaller steps",
+          "Talking with someone I trust",
+          "Understanding my options",
+        ],
+        when("step", "I have a few ideas", "Not yet"),
+      ),
+      choice(
+        "support",
+        "plan",
+        "How would you like support with your next step?",
+        [
+          "Try it myself first",
+          "Plan it with someone",
+          "Have someone check in with me",
+        ],
+      ),
+      choice(
+        "review",
+        "review",
+        "What would you like to discuss at your next review?",
+        [
+          "What I tried",
+          "What helped or got in the way",
+          "Whether my goal still fits",
+          "Decide at the time",
+        ],
+      ),
+    ],
+  ),
+  sampleInstrument(
+    "Support network",
+    "Discuss trusted people, involvement preferences and support with conversations.",
+    [
+      ["people", "People around you"],
+      ["involvement", "Your preferences"],
+      ["next", "Next conversation"],
+    ],
+    [
+      choice(
+        "trusted",
+        "people",
+        "Is there someone you would like to involve in your care conversations?",
+        ["Yes", "I am not sure", "Not at the moment"],
+      ),
+      choice(
+        "who",
+        "people",
+        "Who would you like to involve?",
+        ["A family member", "A friend or trusted person", "A staff member"],
+        when("trusted", "Yes"),
+      ),
+      choice(
+        "involvement",
+        "involvement",
+        "How would you like them to take part?",
+        [
+          "Help me prepare",
+          "Join part of a conversation",
+          "Join the whole conversation",
+        ],
+        when("trusted", "Yes"),
+      ),
+      choice(
+        "preferences",
+        "involvement",
+        "How would you like to discuss your sharing preferences?",
+        [
+          "Privately with a staff member",
+          "With my support person present",
+          "I would like an explanation first",
+        ],
+      ),
+      choice(
+        "connection",
+        "next",
+        "Would you like information about activities with other people?",
+        ["Yes", "Maybe later", "No, thank you"],
+      ),
+      choice("next", "next", "What would help with your next conversation?", [
+        "Planning what I want to say",
+        "Having someone alongside me",
+        "Time to speak on my own",
+        "Nothing extra for now",
+      ]),
+    ],
+  ),
+  sampleInstrument(
+    "Learning and work",
+    "Explore participation in learning or work and the support the person wants.",
+    [
+      ["current", "Your current situation"],
+      ["support", "Support and options"],
+      ["next", "Next steps"],
+    ],
+    [
+      choice("current", "current", "Which area would you like to talk about?", [
+        "School or study",
+        "Work or training",
+        "Exploring options",
+        "Nothing in this area for now",
+      ]),
+      choice(
+        "learning",
+        "current",
+        "What would you like to discuss about school or study?",
+        [
+          "Getting started or returning",
+          "Managing the workload",
+          "Support with participation",
+        ],
+        when("current", "School or study"),
+      ),
+      choice(
+        "work",
+        "current",
+        "What would you like to discuss about work or training?",
+        [
+          "Exploring an opportunity",
+          "Getting started or returning",
+          "Support in my current role",
+        ],
+        when("current", "Work or training"),
+      ),
+      choice(
+        "options",
+        "support",
+        "What would help you explore your options?",
+        [
+          "Information about different paths",
+          "Talking about my interests",
+          "Meeting someone who can advise me",
+        ],
+        when("current", "Exploring options"),
+      ),
+      choice(
+        "support",
+        "support",
+        "How would you like to approach this conversation?",
+        [
+          "Talk with my care team first",
+          "Bring someone I trust",
+          "Look at information in my own time",
+          "Leave it for another visit",
+        ],
+      ),
+      choice("next", "next", "What would be a useful next step?", [
+        "Gather some information",
+        "Agree one small action",
+        "Arrange another conversation",
+        "No action for now",
+      ]),
+    ],
+  ),
+  sampleInstrument(
+    "Care experience",
+    "Reflect on being heard, understanding the plan and preferences for future visits.",
+    [
+      ["visit", "Your recent visit"],
+      ["understanding", "Understanding your care"],
+      ["next", "Future visits"],
+    ],
+    [
+      choice(
+        "heard",
+        "visit",
+        "Did you have space to talk about what mattered to you?",
+        ["Yes", "Partly", "Not this time", "I have not had a visit yet"],
+      ),
+      choice(
+        "heard-help",
+        "visit",
+        "What would help you share your perspective next time?",
+        [
+          "More time to talk",
+          "Preparing my questions beforehand",
+          "A different way to share",
+        ],
+        when("heard", "Partly", "Not this time"),
+      ),
+      choice(
+        "plan",
+        "understanding",
+        "How clear are the next steps discussed with your care team?",
+        [
+          "Clear to me",
+          "I have some questions",
+          "I would like them explained again",
+          "No next steps have been discussed",
+        ],
+      ),
+      choice(
+        "explain",
+        "understanding",
+        "How would you prefer to go over the next steps?",
+        ["Talk them through", "See a written summary", "Use an example"],
+        when(
+          "plan",
+          "I have some questions",
+          "I would like them explained again",
+        ),
+      ),
+      choice(
+        "involved",
+        "understanding",
+        "How would you like to take part in planning future visits?",
+        [
+          "Discuss options together",
+          "Hear options then take time to think",
+          "Have a trusted person join me",
+        ],
+      ),
+      choice(
+        "next",
+        "next",
+        "Is there something about future visits you would like to discuss?",
+        [
+          "The pace of the conversation",
+          "How information is explained",
+          "Who takes part",
+          "Nothing to change for now",
+        ],
+      ),
+    ],
+  ),
+  sampleInstrument(
+    "Practical support",
+    "Identify access needs, contact preferences and help with taking part.",
+    [
+      ["access", "Getting to your visit"],
+      ["communication", "Taking part"],
+      ["next", "Arranging support"],
+    ],
+    [
+      choice(
+        "access",
+        "access",
+        "Is there anything you would like help arranging for your next visit?",
+        [
+          "Getting there",
+          "Finding a suitable time",
+          "Using a device",
+          "Nothing for now",
+        ],
+      ),
+      choice(
+        "travel",
+        "access",
+        "What would help with getting to your visit?",
+        [
+          "Directions or travel information",
+          "Talking through transport options",
+          "Discussing another way to take part",
+        ],
+        when("access", "Getting there"),
+      ),
+      choice(
+        "device",
+        "access",
+        "What would help you take part using a device?",
+        [
+          "Access to a device at the centre",
+          "Help getting set up",
+          "An in-person option",
+        ],
+        when("access", "Using a device"),
+      ),
+      choice(
+        "communication",
+        "communication",
+        "How would you prefer information to be explained?",
+        [
+          "Talk it through",
+          "Read it together",
+          "Use examples",
+          "Discuss language or communication support",
+        ],
+      ),
+      choice(
+        "space",
+        "communication",
+        "What would make the space easier for you to use?",
+        [
+          "A quieter space",
+          "Time for breaks",
+          "Someone alongside me",
+          "No particular preference",
+        ],
+      ),
+      choice(
+        "next",
+        "next",
+        "How would you like to arrange any extra support?",
+        [
+          "Talk with a staff member",
+          "Plan it with someone I trust",
+          "Hear the options first",
+          "No extra support for now",
+        ],
+      ),
+    ],
+  ),
+];
+// The non-Psychosis MVP streams use clearly labelled fictional check-ins until
+// approved stream instruments are available. Older demo definitions remain readable.
+const MVP_OTHER_STREAM_INSTRUMENTS = ["Eating Disorder", "Personality", "Mood"]
+  .map(stream => MVP_STREAM_QUESTIONNAIRES[stream]);
+export const INSTRUMENTS = [
+  ...CLIENT_PROFILE_INSTRUMENTS,
+  ...EP_BATCH_2_INSTRUMENTS,
+  ...EP_BATCH_3_INSTRUMENTS,
+  ...EP_BATCH_4_INSTRUMENTS,
+  ...MVP_OTHER_STREAM_INSTRUMENTS,
+  CLINICIAN_REVIEW_INSTRUMENT,
+];
+export const STANDARD_INSTRUMENTS = [...EP_BATCH_2_INSTRUMENTS, ...EP_BATCH_3_INSTRUMENTS, ...EP_BATCH_4_INSTRUMENTS];
+
+export const INSTRUMENT_GROUPS = [
+  { label: "Client profile", instruments: CLIENT_PROFILE_INSTRUMENTS },
+  { label: "Assessment", instruments: EP_BATCH_2_INSTRUMENTS },
+  { label: "90 Day Review", instruments: EP_BATCH_3_INSTRUMENTS },
+  { label: "Discharge", instruments: EP_BATCH_4_INSTRUMENTS },
+  { label: "Fictional stream check-ins", instruments: [...MVP_OTHER_STREAM_INSTRUMENTS, CLINICIAN_REVIEW_INSTRUMENT] },
+];
+
+export const getInstrument = (version) =>
+  [LEGACY_INSTRUMENT, ...INSTRUMENTS, ...LEGACY_SAMPLE_INSTRUMENTS].find(
+    (instrument) => instrument.version === version ||
+      (version === "Demo check-in v2.0" && instrument === DEMO_INSTRUMENT),
+  ) || null;
+
+const ADMIN_MEASURES_KEY = 'yscc-administration-measures-v1';
+
+function applyAdministrationMeasure(instrument) {
+  const existing = INSTRUMENTS.find(item => item.version === instrument.version);
+  if (existing) Object.assign(existing, instrument);
+  else {
+    INSTRUMENTS.push(instrument);
+    STANDARD_INSTRUMENTS.push(instrument);
+  }
+}
+
+function readAdministrationMeasures() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ADMIN_MEASURES_KEY) || '[]');
+    return Array.isArray(saved) ? saved.filter(item =>
+      item && typeof item.name === 'string' && typeof item.version === 'string' &&
+      Array.isArray(item.respondents) && Array.isArray(item.sections) &&
+      Array.isArray(item.questions)) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Keep the shared catalogue references stable: schedules, previews and responses
+// all resolve versions through these arrays.
+readAdministrationMeasures().forEach(applyAdministrationMeasure);
+
+export function refreshAdministrationMeasures() {
+  readAdministrationMeasures().forEach(applyAdministrationMeasure);
+}
+
+export function saveAdministrationMeasure(instrument) {
+  const saved = readAdministrationMeasures();
+  const next = [...saved.filter(item => item.version !== instrument.version), instrument];
+  localStorage.setItem(ADMIN_MEASURES_KEY, JSON.stringify(next));
+  applyAdministrationMeasure(instrument);
+}
+
+export const questionTitle = (question, respondent) =>
+  respondent === "Family respondent" && question.family
+    ? question.family
+    : question.title;
+
+function validAnswer(question, answer) {
+  if (typeof answer !== 'string' || !answer) return false;
+  if (question.options.includes(answer) || question.nonResponseOptions?.includes(answer)) return true;
+  if (question.multiple) {
+    const values = answer.split('||');
+    return values.length > 0 && new Set(values).size === values.length &&
+      values.every(value => question.options.includes(value));
+  }
+  if (question.responseType === 'number') {
+    const value = Number(answer);
+    return /^\d+$/.test(answer) && Number.isSafeInteger(value) &&
+      (question.min == null || value >= question.min) &&
+      (question.max == null || value <= question.max);
+  }
+  if (question.responseType === 'date') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(answer)) return false;
+    const date = new Date(`${answer}T00:00:00Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === answer;
+  }
+  return question.responseType === 'text' && answer.trim().length > 0;
+}
+
+// Three-valued evaluation distinguishes unresolved branches from excluded ones.
+function matches(rule, values, statuses) {
+  if (!rule) return true;
+  if (rule.all || rule.any) {
+    const results = (rule.all || rule.any).map((child) =>
+      matches(child, values, statuses),
+    );
+    if (rule.all)
+      return results.includes(false)
+        ? false
+        : results.includes(null)
+          ? null
+          : true;
+    return results.includes(true)
+      ? true
+      : results.includes(null)
+        ? null
+        : false;
+  }
+  if (statuses[rule.questionId] === "hidden") return false;
+  if (!values[rule.questionId]) return null;
+  return rule.oneOf.includes(values[rule.questionId]);
+}
+
+export function questionnaireState(instrument, answers = []) {
+  if (!instrument)
+    return {
+      entries: [],
+      visible: [],
+      sections: [],
+      answers: [],
+      answered: 0,
+      total: 0,
+      missing: [],
+      pending: 0,
+      hidden: 0,
+      complete: false,
+      percent: 0,
+    };
+  const values = {},
+    statuses = {};
+  const entries = instrument.questions.map((question, index) => {
+    const match = matches(question.when, values, statuses);
+    const status =
+      match === true ? "visible" : match === false ? "hidden" : "pending";
+    statuses[question.id] = status;
+    const answer =
+      status === "visible" && validAnswer(question, answers[index])
+        ? answers[index]
+        : null;
+    if (answer) values[question.id] = answer;
+    return { question, index, status, answer };
+  });
+  const visible = entries.filter((entry) => entry.status === "visible");
+  const answered = visible.filter((entry) => entry.answer).length;
+  const missing = visible.filter((entry) => !entry.answer);
+  const pending = entries.filter((entry) => entry.status === "pending").length;
+  return {
+    entries,
+    visible,
+    answered,
+    total: visible.length,
+    missing,
+    pending,
+    hidden: entries.filter((entry) => entry.status === "hidden").length,
+    answers: entries.map((entry) =>
+      entry.status === "visible" ? entry.answer || "" : null,
+    ),
+    complete: visible.length > 0 && !missing.length && !pending,
+    percent: visible.length ? Math.round((answered / visible.length) * 100) : 0,
+    sections: instrument.sections.map((section) => {
+      const items = visible.filter(
+        (entry) => entry.question.section === section.id,
+      );
+      return {
+        ...section,
+        items,
+        answered: items.filter((entry) => entry.answer).length,
+        pending: entries.filter(
+          (entry) =>
+            entry.question.section === section.id && entry.status === "pending",
+        ).length,
+      };
+    }),
+  };
+}
+
+export function setQuestionAnswer(instrument, answers, index, value) {
+  const next = [...answers];
+  next[index] = value;
+  return questionnaireState(instrument, next).answers;
+}
+
+export function answerLabel(entry) {
+  return entry.status === "hidden"
+    ? "Not asked · branch did not apply"
+    : entry.status === "pending"
+      ? "Not asked · earlier answer needed"
+      : entry.answer || "No answer recorded";
+}
+
+export function describeRule(instrument, rule, respondent) {
+  if (!rule) return "Asked on every path";
+  if (rule.all || rule.any)
+    return (rule.all || rule.any)
+      .map((child) => `(${describeRule(instrument, child, respondent)})`)
+      .join(rule.all ? " AND " : " OR ");
+  const parent = instrument.questions.find((q) => q.id === rule.questionId);
+  return `“${questionTitle(parent, respondent)}” is ${rule.oneOf.map((value) => `“${value}”`).join(" or ")}`;
+}
+import { MEASURE_INSTRUMENTS } from "./measureQuestionnaires.js";

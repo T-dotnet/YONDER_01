@@ -1,0 +1,212 @@
+import { canAssess } from "./intake.js";
+import { getInstrument } from "./instruments.js";
+import {
+  collectionStatus,
+  formatDate,
+  noClinicalReviewRequired,
+  TODAY,
+} from "./model.js";
+
+// Setup saves collection choices without starting a delivery attempt.
+export function collectionSetupLabel(collection) {
+  if (collection.link === "Expired") return "Replace expired link";
+  if (
+    collection.setupSavedAt ||
+    collection.attempts.length ||
+    collection.response === "Draft" ||
+    ["Active", "Revoked"].includes(collection.link)
+  )
+    return "Review collection options";
+  return "Set up collection";
+}
+
+export function overviewNextStep(person, episode, collection, staff) {
+  const c = collection;
+  const submitted = c.response === "Submitted";
+  const reviewed = submitted && c.review === "Reviewed" && !c.needsReview;
+  const reviewNotRequired = noClinicalReviewRequired(c);
+  const status = collectionStatus(c);
+  const daysLate = Math.round(
+    (Date.parse(TODAY) - Date.parse(c.due)) / 86400000,
+  );
+  const dueDateText = c.due ? `Due ${formatDate(c.due)}` : "Due date not recorded";
+  const overdueText = !submitted && status === "Overdue" && episode.status === "Active"
+    ? `${daysLate} ${daysLate === 1 ? "day" : "days"} overdue`
+    : null;
+  const dueText = `${dueDateText}${overdueText ? ` · ${overdueText}` : ""}`;
+  const step = (title, description, primary, badge = status) => ({
+    title,
+    description,
+    primary,
+    badge,
+    dueText,
+    dueDateText,
+    overdueText,
+  });
+  const details = {
+    label: "View collection details",
+    modal: "collection-details",
+  };
+
+  if (episode.status === "Completed")
+    return {
+      ...step(
+        "Closure follow-up complete",
+        "The closure measure has been reviewed and care experience feedback received. Both responses remain available in Assessment.",
+        { label: "View measures", tab: "Assessment" },
+        "Completed",
+      ),
+      dueText: episode.completedAt
+        ? `Completed ${formatDate(episode.completedAt.slice(0, 10))}`
+        : "Closure follow-up complete",
+    };
+
+  if (episode.status === "Closed" && c.closureKind)
+    return step(
+      submitted
+        ? (c.closureKind === "feedback" ? "Patient feedback received" : reviewed || reviewNotRequired ? "Closure measure reviewed" : "Closure measure needs review")
+        : "Awaiting post-closure response",
+      submitted
+        ? (c.closureKind === "feedback" ? "The patient feedback is retained with this closed episode." : reviewed || reviewNotRequired ? "The final check-in is retained with this closed episode. Care experience feedback is still outstanding." : "Review the patient's final check-in while the episode remains closed.")
+        : "The patient has a sample closure measure assignment. Its link was prepared in this prototype; no SMS was sent.",
+      { label: "Open measure", tab: "Assessment" },
+    );
+
+  if (episode.status !== "Active")
+    return step(
+      episode.status === "Closed"
+        ? "This care episode is closed"
+        : "Care is paused",
+      episode.nextCareStep ||
+        episode.reason ||
+        "Check the episode history for the recorded reason and next care arrangement. Existing responses remain available in Assessment.",
+      { label: "View episode history", tab: "History" },
+      episode.status,
+    );
+
+  // Existing evidence stays readable even if permission or intake changes later.
+  if (submitted) {
+    if (reviewNotRequired)
+      return step(
+        "Measure completed",
+        "The response was recorded through a supported completion method. No separate clinical review is required.",
+        details,
+      );
+    if (reviewed)
+      return step(
+        "Clinical review recorded",
+        `The response and review are saved. ${episode.owner || person.owner || "The care team"} owns the next care decision; measure completion remains separate.`,
+        { label: "View clinical review", modal: "review" },
+      );
+    const clinician = staff?.role === "Clinician";
+    return step(
+      c.needsReview
+        ? "Updated answers need review"
+        : "Responses are ready for review",
+      c.needsReview
+        ? "Answers changed after the previous review. A clinician needs to review the updated response; the earlier review is retained."
+        : "The measure has been submitted. A clinician needs to review the answers and record their interpretation.",
+      {
+        label: clinician
+          ? c.needsReview
+            ? "Review updated answers"
+            : "Review responses"
+          : "View responses",
+        modal: "review",
+      },
+    );
+  }
+
+  if (["Paused", "Cancelled"].includes(c.assignment))
+    return step(
+      `This collection is ${c.assignment.toLowerCase()}`,
+      "Check the recorded collection and episode history before agreeing further measure work.",
+      details,
+      c.assignment,
+    );
+
+  if (!canAssess(person, episode))
+    return step(
+      "Resolve intake before collecting",
+      "Review the intake evidence and proceed decision before starting or reissuing this measure.",
+      { label: "Open overview", tab: "Overview" },
+      "Intake required",
+    );
+
+  if (!c.due)
+    return step(
+      "Plan initial measure",
+      "The initial measure was added after intake. Set its due date and program stream before collecting a response.",
+      { label: "Open measure", tab: "Assessment" },
+      "Needs planning",
+    );
+
+  if (person.consent !== "Recorded" || person.contact !== "Suitable")
+    return step(
+      "Review participation & contact",
+      [
+        person.consent !== "Recorded" &&
+          `Participation is ${(person.consent || "not recorded").toLowerCase()}.`,
+        person.contact !== "Suitable" &&
+          `Contact suitability is ${(person.contact || "not confirmed").toLowerCase()}.`,
+        "Resolve these settings before collecting more answers.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      { label: "Review participation & contact", tab: "Consent & respondents" },
+      "Collection blocked",
+    );
+
+  if (!getInstrument(c.version))
+    return step(
+      "Check the assigned measure",
+      "The assigned version is unavailable. Check the collection details with the care team before arranging another attempt.",
+      details,
+      "Version unavailable",
+    );
+
+  if (c.link === "Expired")
+    return step(
+      "Replace the expired measure link",
+      `The previous link has expired and no response has been submitted.${c.response === "Draft" ? " Saved answers can continue in a new session." : ""} Confirm the respondent and collection method for another attempt on this collection.`,
+      { label: collectionSetupLabel(c), modal: "collection" },
+    );
+
+  if (c.link === "Revoked")
+    return step(
+      "Check why the collection link was revoked",
+      "The previous link is no longer usable. Review the collection and episode history before arranging another attempt.",
+      details,
+    );
+
+  if (c.response === "Draft")
+    return step(
+      status === "Overdue"
+        ? "Follow up the unfinished response"
+        : "Check the response in progress",
+      "Answers are saved, but the measure has not been submitted. Start another collection session to continue, using the same or a different collection method.",
+      details,
+    );
+
+  if (c.attempts.length || c.link === "Active") {
+    const active = c.link === "Active";
+    const channel = c.attempts.at(-1)?.channel || c.channel;
+    return step(
+      status === "Overdue"
+        ? "Follow up the overdue response"
+        : "Awaiting the measure response",
+      `${active ? (channel === "SMS link" ? "The measure link is still active." : "A collection session is active.") : "A collection attempt is recorded."} No response has been submitted. Check the activity and contact arrangements before deciding whether another attempt is needed.`,
+      details,
+    );
+  }
+
+  return step(
+    status === "Overdue"
+      ? "Arrange the overdue measure"
+      : status === "Scheduled"
+        ? "Prepare the scheduled measure"
+        : "Arrange measure collection",
+    "No collection attempt is recorded. Confirm who will answer and choose how to collect their response.",
+    { label: "Set up collection", modal: "collection" },
+  );
+}

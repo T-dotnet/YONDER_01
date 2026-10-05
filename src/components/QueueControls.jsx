@@ -1,0 +1,62 @@
+import { useState } from "react";
+import { X } from "lucide-react";
+import { displayTerminology } from "../terminology.js";
+
+export function useQueueSort(initialSort) {
+  const [sort, setSort] = useState(initialSort);
+  const toggleSort = (key) => {
+    setSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+  return { sort, toggleSort, setSort };
+}
+
+export function SortableHeader({ label, sortKey, sort, onSort, className = "", ...headerProps }) {
+  const active = sort.key === sortKey;
+  return (
+    <th
+      {...headerProps}
+      scope="col"
+      className={`sortable ${className}`.trim()}
+      aria-sort={
+        active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"
+      }
+    >
+      <button type="button" className="sort-header-button" onClick={() => onSort(sortKey)}>
+        {displayTerminology(label)}
+        <span className={`sort-indicator ${active ? "active" : ""}`} aria-hidden="true">
+          {active ? (sort.direction === "asc" ? "↑" : "↓") : "↕"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+export function ActiveFilters({ items, onClear, inline = false }) {
+  if (!items.length) return null;
+  const Wrapper = inline ? 'span' : 'div';
+  return (
+    <Wrapper className="active-filters-row">
+      <Wrapper className="active-filters-list">
+        {items.map(({ id, label, onRemove }) => (
+          <button
+            key={id}
+            type="button"
+            className="filter-chip"
+            onClick={onRemove}
+            aria-label={displayTerminology(`Remove ${label} filter`)}
+          >
+            <span>{displayTerminology(label)}</span>
+            <X size={14} aria-hidden="true" />
+          </button>
+        ))}
+      </Wrapper>
+      <button type="button" className="text-button-small" onClick={onClear}>
+        Clear all
+      </button>
+    </Wrapper>
+  );
+}

@@ -1,0 +1,255 @@
+import { displayMeasureVersion } from '../terminology.js';
+import { episodeWithVisibleContacts } from "../assessmentFeatures.js";
+import { useEffect, useState } from "react";
+import { useStore } from "../store";
+import { assessmentContactLinkingEnabled } from "../assessmentFeatures";
+import { mvpAssessmentMode } from "../mvpAssessmentPathway";
+import { patientIdentifier } from "../patientIdentity";
+import { canAssess } from "../intake";
+import { collectionActor, currentStaff, formatDate } from "../model";
+import { getInstrument } from "../instruments";
+import { Modal, Button, Notice, Success } from "./UI";
+import QuestionnaireFlow from "./QuestionnaireFlow";
+import QuestionnaireAppointmentConfirmation from "./QuestionnaireAppointmentConfirmation";
+import DraftContactForm from "./DraftContactForm";
+import DiscardChanges from "./DiscardChanges";
+
+export default function ClinicianQuestionnaire({
+  person,
+  episode,
+  collection,
+  onClose,
+}) {
+  const { state, commit } = useStore();
+  episode = episodeWithVisibleContacts(episode, state.settings);
+  const simpleAssessments = !assessmentContactLinkingEnabled(state.settings);
+  const separateMeasuresContacts = mvpAssessmentMode(state.settings) && !!state.settings?.mvpSeparateMeasuresContacts;
+  const [answers, setAnswers] = useState(() => [...(collection.draftAnswers || [])]);
+  const [discard, setDiscard] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [pendingAnswers, setPendingAnswers] = useState(null);
+  const [returnToReview, setReturnToReview] = useState(false);
+  const [saveContactOpen, setSaveContactOpen] = useState(false);
+  // Pin this form to the attempt that opened it. Reissued sessions cannot
+  // silently submit answers against a different respondent or recorder.
+  const [attemptId] = useState(collection.attempts.at(-1)?.id);
+  const c = collection;
+  const staff = currentStaff(state);
+  const instrument = getInstrument(c.version);
+  const linkedAppointmentId = simpleAssessments ? null :
+    c.attempts.at(-1)?.appointmentId || c.appointmentId;
+  const linkedAppointment = episode.appointments?.find(
+    (item) => item.id === linkedAppointmentId && ["Planned", "Attended"].includes(item.attendance),
+  );
+  const available =
+    canAssess(person, episode) &&
+    episode.status === "Active" &&
+    c.response !== "Submitted" &&
+    c.assignment === "Active" &&
+    c.link === "Active" &&
+    c.channel === "Clinician entry" &&
+    staff?.role === "Clinician" &&
+    c.recorderId === staff.id &&
+    c.attempts.at(-1)?.id === attemptId &&
+    !!instrument;
+  const dirty = answers.some((answer, index) => answer !== (collection.draftAnswers || [])[index]) && !finished && !draftSaved;
+  const respondent = collectionActor(person, c, "respondent");
+  const requestClose = () => saveContactOpen
+    ? setSaveContactOpen(false)
+    : dirty ? setDiscard(true) : onClose();
+  const saveProgress = (contactLink, completionMethod, assistance) => {
+    const result = commit({
+      type: "SAVE_RESPONSE_PROGRESS",
+      personId: person.id,
+      episodeId: episode.id,
+      collectionId: c.id,
+      channel: "Clinician entry",
+      attemptId,
+      answers,
+      contactLink,
+      completionMethod,
+      assistance,
+    });
+    if (result.error) return setError(result.error);
+    if (separateMeasuresContacts) {
+      setSaveContactOpen(false);
+      setDraftSaved(true);
+      setAnswers([]);
+    } else onClose();
+  };
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const submit = (finalAnswers, confirmation) => {
+    if (!available) return;
+    const result = commit({
+      type: "SUBMIT",
+      personId: person.id,
+      episodeId: episode.id,
+      collectionId: c.id,
+      channel: "Clinician entry",
+      attemptId,
+      answers: finalAnswers,
+      ...(confirmation || {}),
+    });
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setError("");
+    setFinished(true);
+    setAnswers([]);
+  };
+  const completeQuestions = (finalAnswers) => {
+    if (simpleAssessments) return submit(finalAnswers);
+    setPendingAnswers(finalAnswers);
+    setError("");
+  };
+
+  return (
+    <Modal
+      title={
+        draftSaved ? "Draft saved" : finished
+          ? "Measure submitted"
+          : saveContactOpen
+            ? simpleAssessments ? "Save draft" : "Save draft and link contact"
+            : pendingAnswers
+            ? "Completion details"
+            : "Complete measure as clinician"
+      }
+      subtitle={`${patientIdentifier(person)} · ${c.label} · ${displayMeasureVersion(c.version)}`}
+      onClose={requestClose}
+      wide
+    >
+      {saveContactOpen ? (
+        <DraftContactForm
+          episode={episode}
+          collection={c}
+          error={error}
+          showContactChoice={!simpleAssessments}
+          confirmTabletAssistance={simpleAssessments}
+          onCancel={() => { setSaveContactOpen(false); setError(""); }}
+          onSave={saveProgress}
+        />
+      ) : <div className="form-body">
+        {draftSaved ? <Success title="Draft saved" action={<Button variant="primary" onClick={onClose}>Back to record</Button>}>
+          Your answers are saved as a draft on the measure. You can continue it later.
+        </Success> : finished ? (
+          <Success
+            title="Response saved"
+            action={
+              <Button variant="primary" onClick={onClose}>
+                Back to record
+              </Button>
+            }
+          >
+            {respondent}’s answers were recorded by {c.recorderName}.{" "}
+            {c.review === "Not required"
+              ? "No separate clinical review is required."
+              : "Clinical review is pending."}
+          </Success>
+        ) : (
+          <>
+            {!pendingAnswers && (
+              <section
+                className="setup-summary"
+                aria-label="Answer source and recorder"
+              >
+                <dl className="metadata">
+                  <div>
+                    <dt>Answers supplied by</dt>
+                    <dd>{respondent}</dd>
+                  </div>
+                  <div>
+                    <dt>Recorded by</dt>
+                    <dd>{c.recorderName} · Clinician</dd>
+                  </div>
+                  <div>
+                    <dt>Completion method</dt>
+                    <dd>{c.assistance}</dd>
+                  </div>
+                </dl>
+              </section>
+            )}
+            {!pendingAnswers && (
+              <Notice>
+                Enter {respondent}’s answers using the measure wording
+                below. Save progress to continue in another session, or review
+                and submit when complete.
+              </Notice>
+            )}
+            {!available ? (
+              <Notice tone="amber">
+                This collection is no longer available for clinician completion.
+                Close it and check the measure record.
+              </Notice>
+            ) : (
+              <div hidden={discard}>
+                {pendingAnswers ? (
+                  <QuestionnaireAppointmentConfirmation
+                    appointment={linkedAppointment}
+                    collection={c}
+                    episode={episode}
+                    error={error}
+                    onBack={() => {
+                      setReturnToReview(true);
+                      setPendingAnswers(null);
+                      setError("");
+                    }}
+                    onConfirm={(confirmation) => submit(pendingAnswers, confirmation)}
+                  />
+                ) : (
+                  <QuestionnaireFlow
+                    instrument={instrument}
+                    respondent={c.respondent}
+                    answers={answers}
+                    onChange={(value) => {
+                      setAnswers(value);
+                      setError("");
+                    }}
+                    onSubmit={completeQuestions}
+                    submitLabel={simpleAssessments ? "Complete measure" : "Continue to completion details"}
+                    completionNote={simpleAssessments ? undefined :
+                      linkedAppointment
+                        ? `Next, choose the linked appointment on ${formatDate(linkedAppointment.plannedDate)} at ${linkedAppointment.plannedTime}, another existing contact, or a new contact. Your answers have not been submitted yet.`
+                        : "Next, confirm the collection method and choose an existing or new attended contact. Your answers have not been submitted yet."
+                    }
+                    initialReview={returnToReview}
+                    headingLevel="h3"
+                    clinicianEntry
+                  />
+                )}
+                {!pendingAnswers && (
+                  <div className="questionnaire-save-progress">
+                    <Button type="button" onClick={() => { setError(""); if (separateMeasuresContacts) saveProgress({ kind: "none" }); else if (!dirty && answers.some(Boolean)) onClose(); else if (answers.some(Boolean)) setSaveContactOpen(true); else saveProgress({ kind: "none" }); }}>Save as draft</Button>
+                  </div>
+                )}
+              </div>
+            )}
+            {error && !pendingAnswers && (
+              <p className="field-error" role="alert">
+                {error}
+              </p>
+            )}
+          </>
+        )}
+      </div>}
+      {discard && (
+        <DiscardChanges
+          onKeepEditing={() => setDiscard(false)}
+          onDiscard={onClose}
+        />
+      )}
+    </Modal>
+  );
+}

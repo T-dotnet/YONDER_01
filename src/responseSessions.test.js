@@ -1,0 +1,248 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { reducer, TODAY } from "./model.js";
+import { DRAFT_CONTACT_DELIVERY_MODES } from "./appointments.js";
+import { emptyDraftSeed as createSeed } from "./testFixtures.js";
+import { getInstrument, questionnaireState } from "./instruments.js";
+import { createSampleAnswers } from "./sampleQuestionnaires.js";
+import { answerSession, contactContribution, sessionAnswerCounts, sessionContribution } from "./responseSessions.js";
+import { assessmentsForContact, contactsForAssessment } from "./assessmentContacts.js";
+
+const context = { personId: "YS-1024", episodeId: "EP-1024-01", collectionId: "A-0-current" };
+const collection = (state) => state.people[0].episodes[0].collections.at(-1);
+const deliver = (state, channel, assistance) => reducer(state, {
+  ...context, type: "DELIVER", channel, assistance, respondent: "Person",
+});
+
+test("preparing an SMS link is separate from starting and saving a response session", () => {
+  const prepared = deliver(createSeed(), "SMS link", "Independent");
+  const attempt = collection(prepared).attempts.at(-1);
+  assert.ok(Number.isFinite(Date.parse(attempt.preparedAt)));
+  assert.equal(attempt.startedAt, undefined);
+  assert.equal(attempt.endedAt, undefined);
+  assert.equal(attempt.status, "Prepared (sample; not sent)");
+
+  const startAction = { ...context, type: "START_RESPONSE_SESSION", channel: "SMS link", attemptId: attempt.id };
+  const started = reducer(prepared, startAction);
+  const startedAttempt = collection(started).attempts.at(-1);
+  assert.ok(Number.isFinite(Date.parse(startedAttempt.startedAt)));
+  assert.equal(startedAttempt.endedAt, undefined);
+  assert.equal(reducer(started, startAction), started);
+
+  const answers = createSampleAnswers({ participation: "In person" });
+  const saved = reducer(started, {
+    ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "SMS link",
+    attemptId: attempt.id, answers: answers.map((answer, index) => index < 2 ? answer : null),
+  });
+  const savedAttempt = collection(saved).attempts.at(-1);
+  assert.equal(savedAttempt.endedAt, savedAttempt.savedAt);
+  assert.equal(savedAttempt.status, "Progress saved");
+  assert.equal(reducer(saved, startAction), saved);
+  assert.equal(reducer(saved, {
+    ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "SMS link",
+    attemptId: attempt.id, answers,
+  }), saved);
+  assert.equal(reducer(saved, {
+    ...context, type: "SUBMIT", channel: "SMS link",
+    attemptId: attempt.id, answers,
+  }), saved);
+});
+
+test("saving a draft can attribute its answers to an existing attended contact", () => {
+  const ready = deliver(createSeed(), "Clinic tablet", "Independent");
+  const episode = ready.people[0].episodes[0];
+  episode.appointments.push({ id: "contact-for-draft", attendance: "Attended", actualDate: TODAY });
+  const attempt = collection(ready).attempts.at(-1);
+  const answers = createSampleAnswers({ participation: "In person" });
+  const saved = reducer(ready, {
+    ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "Clinic tablet",
+    attemptId: attempt.id, answers,
+    contactLink: { kind: "existing", appointmentId: "contact-for-draft" },
+  });
+  const draft = collection(saved);
+  assert.equal(draft.response, "Draft");
+  assert.equal(draft.attempts.at(-1).appointmentId, "contact-for-draft");
+  assert.ok(contactsForAssessment(saved.people[0].episodes[0], draft.id)
+    .some((contact) => contact.id === "contact-for-draft"));
+  assert.equal(contactContribution(draft, "contact-for-draft", getInstrument(draft.version)).status, "Partial");
+});
+
+test("saving a draft confirms its collection method and records a corrected method", () => {
+  const ready = deliver(createSeed(), "Clinic tablet", "Independent");
+  const attempt = collection(ready).attempts.at(-1);
+  const answers = createSampleAnswers({ participation: "In person" });
+  const action = {
+    ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "Clinic tablet",
+    attemptId: attempt.id, answers, contactLink: { kind: "none" },
+  };
+
+  assert.equal(reducer(ready, { ...action, completionMethod: "SMS link" }), ready);
+  const saved = reducer(ready, { ...action, completionMethod: "Clinician entry" });
+  const draft = collection(saved);
+  assert.equal(draft.response, "Draft");
+  assert.equal(draft.channel, "Clinician entry");
+  assert.equal(draft.attempts.at(-1).channel, "Clinician entry");
+  assert.equal(draft.attempts.at(-1).startedChannel, "Clinic tablet");
+  assert.equal(draft.attempts.at(-1).methodConfirmedBy, "Jess Taylor");
+  assert.ok(Number.isFinite(Date.parse(draft.attempts.at(-1).methodConfirmedAt)));
+});
+
+test("saving a draft can create and link a recorded attended contact atomically", () => {
+  assert.ok(DRAFT_CONTACT_DELIVERY_MODES.includes("Clinic tablet"));
+  assert.ok(DRAFT_CONTACT_DELIVERY_MODES.includes("Clinician entry"));
+  assert.ok(!DRAFT_CONTACT_DELIVERY_MODES.includes("Outreach or community"));
+  const ready = deliver(createSeed(), "Clinic tablet", "Independent");
+  const attempt = collection(ready).attempts.at(-1);
+  const answers = createSampleAnswers({ participation: "In person" });
+  const contact = {
+    attendance: "Attended", plannedDate: TODAY, actualDate: TODAY,
+    plannedTime: "10:00", actualTime: "10:00",
+    plannedDurationMinutes: "30", actualDurationMinutes: "30",
+    practitionerService: "Northside clinician", primaryPractitioner: "Jess Taylor",
+    deliveryMode: "Clinic tablet", recipientType: "Young person", contactType: "Assessment",
+  };
+  const saved = reducer(ready, {
+    ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "Clinic tablet",
+    attemptId: attempt.id, answers, contactLink: { kind: "new", contact },
+  });
+  const episode = saved.people[0].episodes[0];
+  const draft = collection(saved);
+  const linked = episode.appointments.find((item) => item.id === draft.attempts.at(-1).appointmentId);
+  assert.equal(draft.response, "Draft");
+  assert.equal(linked.attendance, "Attended");
+  assert.equal(linked.actualDate, TODAY);
+  assert.equal(contactContribution(draft, linked.id, getInstrument(draft.version)).status, "Partial");
+  assert.equal(reducer(ready, {
+    ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "Clinic tablet",
+    attemptId: attempt.id, answers,
+    contactLink: { kind: "new", contact: { ...contact, actualDate: "2030-01-01" } },
+  }), ready);
+});
+
+test("tablet begins on the questionnaire and clinician entry begins when its form opens", () => {
+  const ready = deliver(createSeed(), "Clinic tablet", "Independent");
+  const tabletAttempt = collection(ready).attempts.at(-1);
+  assert.equal(tabletAttempt.status, "Ready to begin (sample)");
+  assert.equal(tabletAttempt.startedAt, undefined);
+  assert.equal(tabletAttempt.endedAt, undefined);
+  const started = reducer(ready, {
+    ...context, type: "START_RESPONSE_SESSION", channel: "Clinic tablet", attemptId: tabletAttempt.id,
+  });
+  const submitted = reducer(started, {
+    ...context, type: "SUBMIT", channel: "Clinic tablet", attemptId: tabletAttempt.id,
+    answers: createSampleAnswers({ participation: "In person" }),
+  });
+  const completedAttempt = collection(submitted).attempts.at(-1);
+  assert.ok(Number.isFinite(Date.parse(completedAttempt.startedAt)));
+  assert.equal(completedAttempt.endedAt, collection(submitted).submittedTimestamp);
+
+  const clinician = deliver(createSeed(), "Clinician entry", "Transcribed");
+  assert.ok(Number.isFinite(Date.parse(collection(clinician).attempts.at(-1).startedAt)));
+});
+
+test("answers saved in one channel remain attributed to it after completion in another", () => {
+  const started = deliver(createSeed(), "SMS link", "Independent");
+  const instrument = getInstrument(collection(started).version);
+  const complete = questionnaireState(instrument, createSampleAnswers({ participation: "In person" })).answers;
+  const firstSession = collection(started).attempts.at(-1).id;
+  const partial = complete.map((answer, index) => index < 2 ? answer : null);
+  const saved = reducer(started, { ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "SMS link", attemptId: firstSession, answers: partial });
+  assert.equal(collection(saved).response, "Draft");
+  assert.equal(collection(saved).draftAnswerSources[instrument.questions[0].id], firstSession);
+
+  const resumed = deliver(saved, "Clinician entry", "Transcribed");
+  const secondSession = collection(resumed).attempts.at(-1).id;
+  assert.notEqual(firstSession, secondSession);
+  assert.equal(reducer(resumed, { ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "SMS link", attemptId: firstSession, answers: complete }), resumed);
+  assert.equal(reducer(resumed, { ...context, type: "DELIVER", channel: "Clinic tablet", assistance: "Independent", respondent: "Family respondent" }), resumed);
+  const submitted = reducer(resumed, { ...context, type: "SUBMIT", channel: "Clinician entry", attemptId: secondSession, answers: complete });
+  const c = collection(submitted);
+  assert.equal(c.response, "Submitted");
+  assert.equal(c.submittedAttemptId, secondSession);
+  assert.equal(answerSession(c, instrument.questions[0].id)?.channel, "SMS link");
+  assert.equal(answerSession(c, instrument.questions[2].id)?.channel, "Clinician entry");
+  assert.equal([...sessionAnswerCounts(c, instrument).values()].reduce((sum, count) => sum + count, 0),
+    questionnaireState(instrument, c.answers).answered);
+  const counts = sessionAnswerCounts(c, instrument);
+  assert.deepEqual(sessionContribution(c, c.attempts.find((attempt) => attempt.id === firstSession), counts), {
+    answerCount: counts.get(firstSession), status: "Partial",
+  });
+  assert.deepEqual(sessionContribution(c, c.attempts.find((attempt) => attempt.id === secondSession), counts), {
+    answerCount: counts.get(secondSession),
+    status: "Completed",
+  });
+  const linked = {
+    ...c,
+    attempts: c.attempts.map((attempt) => ({
+      ...attempt,
+      appointmentId: attempt.id === firstSession ? "contact-1" : attempt.id === secondSession ? "contact-2" : attempt.appointmentId,
+    })),
+  };
+  assert.equal(contactContribution(linked, "contact-1", instrument).status, "Partial");
+  assert.equal(contactContribution(linked, "contact-2", instrument).status, "Completed");
+  assert.equal(contactContribution(linked, "contact-2", instrument).totalAnswers,
+    questionnaireState(instrument, c.answers).total);
+  assert.deepEqual(contactContribution(linked, "contact-3", instrument).methods, []);
+  assert.equal(contactContribution(linked, "contact-3", instrument).status, "None");
+});
+
+test("changing a saved answer moves only that answer to the new session", () => {
+  const first = deliver(createSeed(), "SMS link", "Independent");
+  const instrument = getInstrument(collection(first).version);
+  const complete = questionnaireState(instrument, createSampleAnswers({ participation: "In person" })).answers;
+  const firstId = collection(first).attempts.at(-1).id;
+  const saved = reducer(first, { ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "SMS link", attemptId: firstId, answers: complete });
+  const second = deliver(saved, "Clinician entry", "Transcribed");
+  const changed = [...complete];
+  const changeIndex = questionnaireState(instrument, complete).visible.at(-1).index;
+  changed[changeIndex] = instrument.questions[changeIndex].options.find((option) => option !== complete[changeIndex]);
+  const secondId = collection(second).attempts.at(-1).id;
+  const submitted = reducer(second, { ...context, type: "SUBMIT", channel: "Clinician entry", attemptId: secondId, answers: changed });
+  const c = collection(submitted);
+  assert.equal(c.answerSources[instrument.questions[changeIndex].id], secondId);
+  assert.equal(c.answerSources[instrument.questions[0].id], firstId);
+});
+
+test("Jordan's sample shows an SMS contact with partial answers before clinic completion", () => {
+  const state = createSeed();
+  const episode = state.people.find((person) => person.id === "YS-1034").episodes[0];
+  const checkIn = episode.collections.find((item) => item.id === "A-7-life-care-twelve-weeks");
+  const instrument = getInstrument(checkIn.version);
+  const sms = episode.appointments.find((item) => item.id === "APT-7-sms-check-in");
+  const clinic = episode.appointments.find((item) => item.id === "APT-7-twelve-weeks");
+
+  assert.equal(sms.deliveryMode, "SMS");
+  assert.equal(sms.attendance, "Attended");
+  assert.equal(sms.actualDate, "2026-09-07");
+  assert.equal(checkIn.submittedAt.slice(0, 10), "2026-09-08");
+  assert.equal(contactContribution(checkIn, sms.id, instrument).status, "Partial");
+  assert.equal(contactContribution(checkIn, sms.id, instrument).answerCount, 2);
+  assert.equal(contactContribution(checkIn, clinic.id, instrument).status, "Completed");
+  assert.equal(contactContribution(checkIn, clinic.id, instrument).answerCount, 4);
+  assert.equal(contactContribution(checkIn, sms.id, instrument).totalAnswers, 6);
+  assert.ok(contactsForAssessment(episode, checkIn.id).some((item) => item.id === sms.id));
+  assert.ok(assessmentsForContact(episode, sms.id).some((item) => item.id === checkIn.id));
+});
+
+test("an empty questionnaire can be saved as a draft and resumed without submitting a response", () => {
+  const ready = deliver(createSeed(), "Clinic tablet", "Independent");
+  const attempt = collection(ready).attempts.at(-1);
+  const action = { ...context, type: "SAVE_RESPONSE_PROGRESS", channel: "Clinic tablet",
+    attemptId: attempt.id, answers: [], contactLink: { kind: "none" } };
+  const saved = reducer(ready, action);
+  assert.notEqual(saved, ready);
+  const draft = collection(saved);
+  assert.equal(draft.response, "Draft");
+  assert.equal(draft.draftAnswers.some(Boolean), false);
+  assert.equal(draft.answers.some(Boolean), false);
+  assert.equal(draft.submittedTimestamp, undefined);
+  assert.ok(draft.attempts.at(-1).savedAt);
+  assert.equal(draft.attempts.at(-1).endedAt, draft.attempts.at(-1).savedAt);
+  assert.equal(reducer(saved, action), saved);
+  const resumed = deliver(saved, "Clinic tablet", "Independent");
+  assert.equal(collection(resumed).response, "Draft");
+  assert.equal(collection(resumed).draftAnswers.some(Boolean), false);
+  assert.notEqual(collection(resumed).attempts.at(-1).id, attempt.id);
+  assert.equal(collection(resumed).attempts.at(-1).endedAt, undefined);
+  assert.equal(reducer(resumed, action), resumed);
+});

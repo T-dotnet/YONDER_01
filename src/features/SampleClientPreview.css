@@ -1,0 +1,135 @@
+.sample-client-preview .sample-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.sample-client-preview .sample-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+}
+
+.sample-client-preview .sample-facts div,
+.sample-client-preview .sample-source-fields div {
+  min-width: 0;
+}
+
+.sample-client-preview dt {
+  color: var(--muted);
+  font-size: var(--type-metadata);
+  font-weight: var(--type-weight-semibold);
+}
+
+.sample-client-preview dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.sample-client-preview .sample-missing-list {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-5);
+}
+
+.sample-client-preview .sample-missing-list li + li {
+  margin-top: var(--space-2);
+}
+
+.sample-client-preview .sample-episode-panel {
+  margin-bottom: var(--space-4);
+}
+
+.sample-client-preview .sample-episode-facts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sample-client-preview .sample-episode-panel h3 {
+  margin: var(--space-6) 0 var(--space-3);
+  font-size: var(--type-title);
+}
+
+.sample-client-preview .sample-source-disclosure {
+  max-width: 100%;
+}
+
+.sample-client-preview .sample-source-disclosure > summary,
+.sample-client-preview .sample-event-evidence summary {
+  color: var(--focus-ring);
+  cursor: pointer;
+  font-weight: var(--type-weight-semibold);
+}
+
+.sample-client-preview .sample-source-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+}
+
+.sample-client-preview .sample-source-fields dt {
+  overflow-wrap: anywhere;
+}
+
+.sample-client-preview .sample-source-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--focus-ring);
+  cursor: pointer;
+  font: inherit;
+  font-weight: var(--type-weight-semibold);
+  text-align: left;
+}
+
+.sample-client-preview .sample-source-toggle:hover {
+  text-decoration: underline;
+}
+
+.sample-client-preview .sample-event-source-row > td {
+  padding: var(--space-4);
+  background: var(--surface-warm);
+}
+
+.sample-client-preview .sample-event-source-row .sample-source-fields {
+  gap: var(--space-4) var(--space-6);
+}
+
+.sample-client-preview .sample-events-scroll {
+  overflow-x: auto;
+}
+
+.sample-client-preview .sample-events-table {
+  width: 100%;
+  min-width: 720px;
+}
+
+.sample-client-preview .sample-events-table td {
+  vertical-align: top;
+}
+
+.sample-client-preview .sample-events-table td small,
+.sample-client-preview .sample-event-evidence > span {
+  display: block;
+}
+
+.sample-client-preview .sample-event-evidence > * + * {
+  margin-top: var(--space-1);
+}
+
+.sample-client-preview .sample-event-evidence ul {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+}
+
+@media (max-width: 800px) {
+  .sample-client-preview .sample-preview-grid,
+  .sample-client-preview .sample-facts,
+  .sample-client-preview .sample-episode-facts {
+    grid-template-columns: 1fr;
+  }
+}

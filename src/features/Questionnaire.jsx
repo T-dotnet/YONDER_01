@@ -1,0 +1,447 @@
+import { episodeWithVisibleContacts } from "../assessmentFeatures.js";
+import { canAssess } from "../intake";
+import { useState, useEffect } from "react";
+import {
+  ArrowRight,
+  Check,
+  HeartHandshake,
+  Clock3,
+  ShieldCheck,
+  LifeBuoy,
+} from "lucide-react";
+import { useStore } from "../store";
+import { assessmentContactLinkingEnabled, assessmentSmsEnabled } from "../assessmentFeatures";
+import { mvpAssessmentMode } from "../mvpAssessmentPathway";
+import { canCollectInEpisode, displayFamilyName, displayPersonName, formatDate } from "../model";
+import {
+  STANDARD_INSTRUMENTS,
+  getInstrument,
+  questionnaireState,
+} from "../instruments";
+import QuestionnaireFlow from "../components/QuestionnaireFlow";
+import QuestionnaireAppointmentConfirmation from "../components/QuestionnaireAppointmentConfirmation";
+import TabletAssistanceConfirmation from "../components/TabletAssistanceConfirmation";
+import DraftContactForm from "../components/DraftContactForm";
+import { ActionGroup, Logo, Button, Success, Modal, Notice } from "../components/UI";
+export default function Questionnaire({ session, navigate, onEnd }) {
+  const { state, commit, storageError } = useStore();
+  const p = state.people.find((p) => p.id === session?.personId),
+    e = episodeWithVisibleContacts(p?.episodes.find((e) => e.id === session?.episodeId), state.settings),
+    c = e?.collections.find((c) => c.id === session?.collectionId);
+  const simpleAssessments = !assessmentContactLinkingEnabled(state.settings);
+  const separateMeasuresContacts = mvpAssessmentMode(state.settings) && !!state.settings?.mvpSeparateMeasuresContacts;
+  const [step, setStep] = useState(-1),
+    [answers, setAnswers] = useState(() => [...(session ? (c?.draftAnswers || []) : [])]),
+    [help, setHelp] = useState(false),
+    [finished, setFinished] = useState(false),
+    [ended, setEnded] = useState(false);
+  const [pendingAnswers, setPendingAnswers] = useState(null);
+  const [returnToReview, setReturnToReview] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [saveContactOpen, setSaveContactOpen] = useState(false);
+  const [savedDraftContact, setSavedDraftContact] = useState(null);
+  const [submitError, setSubmitError] = useState("");
+  const dirty = answers.some((answer, index) => answer !== (session ? c?.draftAnswers || [] : [])[index]);
+  const instrument = session ? getInstrument(c?.version) : STANDARD_INSTRUMENTS[0];
+  const linkedAppointmentId = simpleAssessments ? null :
+    c?.attempts.at(-1)?.appointmentId || c?.appointmentId;
+  const linkedAppointment =
+    ["Clinic tablet", "Clinician entry"].includes(c?.channel)
+      ? e?.appointments?.find(
+          (item) =>
+            item.id === linkedAppointmentId && ["Planned", "Attended"].includes(item.attendance),
+        )
+      : null;
+  const preview = !session,
+    unavailable =
+      !preview &&
+      (!canAssess(p, e) ||
+        !c ||
+        !instrument ||
+        c.channel === "Clinician entry" ||
+        (c.channel === "SMS link" && !assessmentSmsEnabled(state.settings)) ||
+        c.assignment !== "Active" ||
+        c.link !== "Active" ||
+        (session.attemptId && session.attemptId !== c.attempts.at(-1)?.id) ||
+        !!c.attempts.at(-1)?.endedAt ||
+        !canCollectInEpisode(e, c) ||
+        ["Revoked", "Expired"].includes(c.link) ||
+        c.response === "Submitted");
+  const end = () => {
+    setAnswers([]);
+    setEnded(true);
+    onEnd();
+  };
+  const returnToStaff = () => {
+    if (!session?.personId) return navigate("/");
+    const params = new URLSearchParams({ tab: "assessment" });
+    if (session.episodeId) params.set("episode", session.episodeId);
+    if (session.collectionId) params.set("collection", session.collectionId);
+    navigate(`/people/${encodeURIComponent(session.personId)}?${params}`);
+  };
+  const requestEnd = () =>
+    dirty && !finished ? setConfirmLeave(true) : end();
+  const beginQuestionnaire = () => {
+    if (preview) return setStep(0);
+    if (unavailable) return;
+    const attempt = c.attempts.at(-1);
+    if (!attempt.startedAt) {
+      const result = commit({
+        ...session,
+        type: "START_RESPONSE_SESSION",
+        channel: attempt.channel,
+        attemptId: attempt.id,
+      });
+      if (result.error) return setSubmitError(result.error);
+    }
+    setSubmitError("");
+    setStep(0);
+  };
+  const saveProgress = (contactLink, completionMethod, assistance) => {
+    if (!session || unavailable) return;
+    const result = commit({ ...session, type: "SAVE_RESPONSE_PROGRESS", answers, contactLink, completionMethod, assistance });
+    if (result.error) return setSubmitError(result.error);
+    setSavedDraftContact(simpleAssessments ? "simple" : contactLink.kind);
+    setSaveContactOpen(false);
+    end();
+  };
+  const submit = (finalAnswers, confirmation) => {
+    if (!questionnaireState(instrument, finalAnswers).complete || unavailable)
+      return;
+    if (session) {
+      const result = commit({
+        ...session,
+        type: "SUBMIT",
+        answers: finalAnswers,
+        ...(confirmation || {}),
+      });
+      if (result.error) {
+        setSubmitError(result.error);
+        return;
+      }
+    }
+    setSubmitError("");
+    setFinished(true);
+    setStep(4);
+  };
+  const completeQuestions = (finalAnswers) => {
+    if (separateMeasuresContacts) return submit(finalAnswers);
+    if (simpleAssessments && c?.channel === "Clinic tablet") {
+      setPendingAnswers(finalAnswers);
+      setSubmitError("");
+      return;
+    }
+    if (!simpleAssessments && c?.channel === "Clinic tablet") {
+      setPendingAnswers(finalAnswers);
+      setSubmitError("");
+      return;
+    }
+    submit(finalAnswers);
+  };
+  useEffect(() => {
+    document.querySelector(".questionnaire h1")?.focus();
+  }, [step, ended, finished, unavailable]);
+  useEffect(() => {
+    if (!dirty || finished || ended) return;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, finished, ended]);
+  return (
+    <div className="participant">
+      <header className="participant-header">
+        <Logo />
+        <span>
+          {preview
+            ? "Sample measure · practice only"
+            : "Measure · sample content"}
+        </span>
+      </header>
+      <main className="questionnaire">
+        {ended ? (
+          <Success
+            heading="h1"
+            title={savedDraftContact ? "Draft saved" : "This session has ended"}
+            action={
+              <Button
+                variant="primary"
+                onClick={returnToStaff}
+              >
+                Return to staff demo
+                <ArrowRight size={18} />
+              </Button>
+            }
+          >
+            {savedDraftContact
+              ? simpleAssessments ? "Your draft is saved on the measure. You can continue it in another session." : `Your answers are saved on the measure. ${savedDraftContact === "none" ? "No contact was linked." : "The contact is linked under Related contacts."} You can continue the measure in another session.`
+              : "The participant view has been cleared. In a live service, staff would sign in again before opening the workspace."}
+          </Success>
+        ) : finished ? (
+          <Success
+            heading="h1"
+            title={
+              preview
+                ? "Practice complete. Thank you."
+                : "Thank you. Your response is received."
+            }
+            action={
+              <Button variant="primary" onClick={end}>
+                End session
+                <Check size={18} />
+              </Button>
+            }
+          >
+            {storageError
+              ? "Your sample response is held in this open tab; browser storage is unavailable."
+              : preview
+                ? "You’ve completed the sample measure. This preview is separate from a care record."
+                : "Your sample answers have been added to the record for the care team to review."}{" "}
+            This does not mean that a clinical review has taken place.
+          </Success>
+        ) : unavailable ? (
+          <Success
+            heading="h1"
+            title="This request is unavailable"
+            action={
+              <Button variant="primary" onClick={end}>
+                End session
+              </Button>
+            }
+          >
+            This sample link may have ended, expired, or already been completed.
+            Ask the care team for the appropriate next step.
+          </Success>
+        ) : (
+          <>
+            {step === -1 ? (
+              <>
+                <span className="participant-symbol">
+                  <HeartHandshake size={35} />
+                </span>
+                <h1 tabIndex={-1}>
+                  {session?.respondent === "Family respondent"
+                    ? "Your perspective matters."
+                    : "A little check-in, at your pace."}
+                </h1>
+                <p className="intro-copy">
+                  {session?.respondent === "Family respondent"
+                    ? "Share your own experience as a family respondent. Your answers are a separate contribution."
+                    : instrument.introduction ||
+                      `Your care team would like to hear your perspective. ${instrument.description}`}
+                </p>
+                <div className="request-facts">
+                  <span>
+                    <Clock3 size={20} />
+                    <strong>
+                      Up to {instrument.questions.length} questions ·{" "}
+                      {instrument.sections.length} sections
+                    </strong>
+                  </span>
+                  <span>
+                    <ShieldCheck size={20} />
+                    <strong>
+                      {session?.channel === "Clinician entry"
+                        ? "Recorded with staff"
+                        : "No account needed"}
+                    </strong>
+                  </span>
+                </div>
+                <div className="participant-info">
+                  <h2>Before you begin</h2>
+                  <p>
+                    <strong>
+                      {preview
+                        ? "Practice measure"
+                        : "Requested by Northside Centre"}
+                    </strong>
+                    {p
+                      ? session?.respondent === "Clinician" ? " · clinician response" : ` · ${session?.respondent === "Family respondent" ? displayFamilyName(p) : displayPersonName(p)} · ${session?.respondent === "Family respondent" ? "family contribution" : "own answers"}`
+                      : " · no care record is updated"}
+                  </p>
+                  {instrument.timeframe && (
+                    <p>
+                      <strong>Questions cover:</strong> {instrument.timeframe}
+                    </p>
+                  )}
+                  <ul>
+                    <li>Use sample answers only.</li>
+                    <li>
+                      {preview
+                        ? "This preview does not update a person’s care record."
+                        : "Answers in this demo are visible to the sample care team in this browser."}
+                    </li>
+                    <li>
+                      You can choose “Prefer not to answer” for any question.
+                    </li>
+                    <li>
+                      Questions adapt to your answers. Work through one question
+                      at a time, jump between sections, and review before
+                      submitting.
+                    </li>
+                    <li>
+                      Save progress to continue in another session. Unsaved
+                      changes are cleared if you leave or refresh.
+                    </li>
+                    <li>
+                      You can ask someone supporting you for help. Responses
+                      are not monitored and no live support service is connected.
+                    </li>
+                  </ul>
+                </div>
+                <Button
+                  variant="primary"
+                  className="participant-next"
+                  onClick={beginQuestionnaire}
+                >
+                  Begin measure
+                  <ArrowRight size={20} />
+                </Button>
+                <p className="privacy-copy">
+                  These questions are not an approved clinical measure.
+                </p>
+              </>
+            ) : pendingAnswers ? (
+              simpleAssessments ? <TabletAssistanceConfirmation
+                error={submitError}
+                onBack={() => {
+                  setReturnToReview(true);
+                  setPendingAnswers(null);
+                  setSubmitError("");
+                }}
+                onConfirm={(confirmation) => submit(pendingAnswers, confirmation)}
+              /> : <QuestionnaireAppointmentConfirmation
+                appointment={linkedAppointment}
+                collection={c}
+                episode={e}
+                error={submitError}
+                onBack={() => {
+                  setReturnToReview(true);
+                  setPendingAnswers(null);
+                  setSubmitError("");
+                }}
+                onConfirm={(confirmation) => submit(pendingAnswers, confirmation)}
+                tablet
+              />
+            ) : (
+              <QuestionnaireFlow
+                instrument={instrument}
+                respondent={session?.respondent}
+                answers={answers}
+                onChange={setAnswers}
+                onSubmit={completeQuestions}
+                submitLabel={
+                  separateMeasuresContacts ? "Complete assessment" : c?.channel === "Clinic tablet"
+                    ? simpleAssessments ? "Confirm tablet assistance" : "Continue to completion details"
+                    : undefined
+                }
+                completionNote={
+                  separateMeasuresContacts ? undefined : simpleAssessments && c?.channel === "Clinic tablet"
+                    ? "Next, confirm whether the tablet answers were completed independently or with assistance. Your answers have not been submitted yet."
+                    : !simpleAssessments && c?.channel === "Clinic tablet" && linkedAppointment
+                    ? `Next, choose the linked appointment on ${formatDate(linkedAppointment.plannedDate)} at ${linkedAppointment.plannedTime}, another existing contact, or a new contact. Your answers have not been submitted yet.`
+                    : !simpleAssessments && c?.channel === "Clinic tablet"
+                      ? "Next, confirm the collection method and choose an existing or new attended contact. Your answers have not been submitted yet."
+                      : undefined
+                }
+                initialReview={returnToReview}
+                preview={preview}
+                headingLevel="h1"
+              />
+            )}
+            {!pendingAnswers && (
+              <div className="participant-help">
+                {!preview && (
+                  <button onClick={() => { setSubmitError(""); if (separateMeasuresContacts) saveProgress({ kind: "none" }); else if (!dirty && answers.some(Boolean)) { end(); returnToStaff(); } else if (answers.some(Boolean)) setSaveContactOpen(true); else saveProgress({ kind: "none" }); }}>Save as draft and leave</button>
+                )}
+                <button onClick={() => setHelp(true)}>
+                  <LifeBuoy size={18} />
+                  Need help or a break?
+                </button>
+                <button onClick={requestEnd}>Leave measure</button>
+              </div>
+            )}
+            {submitError && !pendingAnswers && (
+              <p className="field-error" role="alert">
+                {submitError}
+              </p>
+            )}
+          </>
+        )}
+      </main>
+      <footer className="participant-footer">YSCC · Care, connected</footer>
+      {saveContactOpen && (
+        <Modal title={simpleAssessments ? "Save draft" : "Save draft and link contact"} onClose={() => setSaveContactOpen(false)} wide>
+          <DraftContactForm
+            episode={e}
+            collection={c}
+            error={submitError}
+            showContactChoice={!simpleAssessments}
+            confirmTabletAssistance={simpleAssessments}
+            onCancel={() => setSaveContactOpen(false)}
+            onSave={saveProgress}
+          />
+        </Modal>
+      )}
+      {confirmLeave && (
+        <Modal
+          title="Leave without saving changes?"
+          onClose={() => setConfirmLeave(false)}
+        >
+          <div className="form-body">
+            <p>
+              Your answers have not been submitted. Leaving clears changes
+              made in this session. Previously saved progress remains available.
+            </p>
+          </div>
+          <ActionGroup className="modal-footer">
+            <Button variant="primary" onClick={() => setConfirmLeave(false)}>
+              Keep answering
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmLeave(false);
+                end();
+              }}
+            >
+              Leave without saving
+            </Button>
+          </ActionGroup>
+        </Modal>
+      )}
+      {help && (
+        <Modal title="Take the time you need" onClose={() => setHelp(false)}>
+          <div className="form-body">
+            <p>
+              You can ask the person supporting you to explain a question, or
+              contact your care team through your usual service contact.
+            </p>
+            <Notice>
+              Responses are not monitored. No live care or support
+              service is connected.
+            </Notice>
+            <p>
+              Save progress before leaving to keep this session’s answers.
+              Previously saved answers remain available in another session.
+            </p>
+            <ActionGroup className="actions">
+              <Button onClick={() => setHelp(false)}>
+                Continue measure
+              </Button>
+              <Button
+                onClick={() => {
+                  setHelp(false);
+                  requestEnd();
+                }}
+              >
+                End this session
+              </Button>
+            </ActionGroup>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}

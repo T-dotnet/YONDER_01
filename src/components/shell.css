@@ -1,0 +1,367 @@
+/* The framed workspace scrolls inside main, never on the document canvas. */
+html:has(.shell-modern), body:has(.shell-modern) { overflow: hidden; }
+
+/* Mobbin references: Descript's inset workspace and Asana's integrated chrome.
+   All rules are opt-in through .shell-modern; ?shell=classic restores the old shell. */
+.shell.shell-modern {
+  --shell-frame: #e9ede7;
+  --shell-nav-hover: #dfe6dc;
+  --shell-nav-active: #d4dfce;
+  --shell-divider: #cbd4c5;
+  --shell-profile-divider: #d1d9cc;
+  --shell-control-surface: #f6f8f4;
+  --shell-control-border: #d7ded2;
+  --shell-content-top: 32px;
+  --sidebar-width: 232px;
+  --sidebar-collapsed-width: 76px;
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: clip;
+  contain: layout paint;
+  padding-bottom: var(--space-4);
+  background: var(--shell-frame);
+}
+
+.shell.shell-modern > .sidebar {
+  inset: 12px auto 12px 12px;
+  padding: var(--space-2) var(--space-3) 0;
+  width: calc(var(--sidebar-width) - 12px);
+  border: 0;
+  background: var(--shell-frame);
+}
+
+.shell.shell-modern > .sidebar.collapsed {
+  width: calc(var(--sidebar-collapsed-width) - 12px);
+  padding-inline: var(--space-1);
+}
+
+.shell.shell-modern .brand-row {
+  min-height: 40px;
+  padding: 0 var(--space-1) var(--space-4);
+}
+
+.shell.shell-modern .sidebar.collapsed .brand-row {
+  gap: var(--space-1);
+  padding-inline: 0;
+}
+
+.shell.shell-modern .sidebar-collapse {
+  display: none;
+}
+
+.shell.shell-modern .sidebar .scope {
+  margin: var(--space-1) 0 var(--space-5);
+  padding: var(--space-2-5) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.shell.shell-modern .sidebar .scope:hover {
+  background: var(--shell-nav-hover);
+}
+
+.shell.shell-modern .sidebar nav {
+  gap: var(--space-1-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--shell-divider);
+}
+
+.shell.shell-modern .sidebar .nav-item {
+  min-height: 42px;
+  padding: var(--space-2-5) var(--space-3);
+  gap: var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  font-size: var(--type-supporting);
+  transition: background-color 160ms ease-out, color 160ms ease-out;
+}
+
+.shell.shell-modern .sidebar.collapsed .nav-item {
+  padding-inline: 0;
+}
+
+.shell.shell-modern .sidebar .nav-item svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.shell.shell-modern .sidebar .nav-item:hover:not(.active) {
+  background: var(--shell-nav-hover);
+  color: var(--ink);
+}
+
+.shell.shell-modern .sidebar .nav-item.active {
+  background: var(--shell-nav-active);
+  color: var(--orygen-forest);
+}
+
+.shell.shell-modern .sidebar .nav-item.active svg {
+  color: var(--orygen-forest);
+}
+
+.shell.shell-modern .sidebar-bottom {
+  padding-top: var(--space-6);
+}
+
+.shell.shell-modern .sidebar .profile {
+  border-top-color: var(--shell-profile-divider);
+  padding: var(--space-4) var(--space-1) var(--space-2);
+}
+
+.shell.shell-modern .sidebar .profile:hover {
+  background: var(--shell-nav-hover);
+}
+
+.shell.shell-modern > .app-body {
+  margin-left: var(--sidebar-width);
+  min-width: 0;
+}
+
+.shell.shell-modern > .sidebar.collapsed + .app-body {
+  margin-left: var(--sidebar-collapsed-width);
+}
+
+.shell.shell-modern .topbar {
+  z-index: 20;
+  height: 64px;
+  padding: 0 var(--space-6) 0 var(--space-5);
+  border: 0;
+  background: var(--shell-frame);
+}
+
+.shell.shell-modern .global-search-input {
+  background: var(--shell-control-surface);
+  border-color: var(--shell-control-border);
+  border-radius: var(--radius-sm);
+}
+
+.shell.shell-modern .topbar-search {
+  /* Center when possible; leave room for the controls on narrower headers. */
+  --shell-search-width: min(390px, calc(100% - 520px));
+  position: absolute;
+  left: min(
+    calc((100% - var(--shell-search-width)) / 2),
+    calc(100% - var(--shell-search-width) - 355px)
+  );
+  width: var(--shell-search-width);
+  max-width: 390px;
+  min-width: 32px;
+  margin-left: 0;
+}
+
+.shell.shell-modern .topbar-search + .topbar-right::before {
+  content: "";
+  width: 1px;
+  height: 24px;
+  flex-shrink: 0;
+  background: var(--shell-divider);
+}
+
+.shell.shell-modern .topbar-search + .topbar-right {
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .shell.shell-modern .topbar-search {
+    --shell-search-width: 32px;
+    left: calc((100% - var(--shell-search-width)) / 2);
+  }
+}
+
+@media (max-width: 700px) {
+  .shell.shell-modern .topbar-search {
+    position: relative;
+    left: auto;
+    margin-right: auto;
+  }
+}
+
+.shell.shell-modern .global-search-input:focus-within {
+  background: var(--surface);
+  border-color: var(--orygen-forest);
+}
+
+.shell.shell-modern .topbar-divider {
+  background: var(--shell-divider);
+}
+
+.shell.shell-modern .topbar-right {
+  flex-shrink: 0;
+  gap: var(--space-3);
+}
+
+.shell.shell-modern .notification-popover {
+  position: fixed;
+  top: 64px;
+  left: auto;
+  right: 16px;
+  width: min(480px, calc(100vw - var(--sidebar-collapsed-width) - 16px));
+  max-height: calc(100dvh - 80px);
+}
+
+@media (max-width: 700px) {
+  .shell.shell-modern .notification-popover {
+    top: 56px;
+    left: auto;
+    right: 8px;
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 64px);
+  }
+}
+
+.shell.shell-modern .topbar-right .notification-bell-btn {
+  width: auto;
+  min-width: 52px;
+  min-height: 40px;
+  padding: var(--space-2);
+  gap: var(--space-1-5);
+}
+
+.shell.shell-modern .system-status-indicator,
+.shell.shell-modern .logout-button {
+  min-width: 40px;
+  min-height: 40px;
+  justify-content: center;
+}
+
+.shell.shell-modern .system-status-indicator,
+.shell.shell-modern .logout-button {
+  background: transparent;
+  border-color: transparent;
+}
+
+.shell.shell-modern .system-status-indicator:hover,
+.shell.shell-modern .logout-button:hover {
+  background: var(--shell-control-surface);
+  border-color: var(--shell-control-border);
+}
+
+.shell.shell-modern .app-body > .main {
+  width: calc(100% - 16px);
+  max-width: none;
+  height: calc(100dvh - 80px);
+  min-height: 0;
+  overflow: auto;
+  margin: 0 var(--space-4) 0 0;
+  padding: var(--space-8) var(--content-padding-inline) var(--space-12);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  scroll-margin-top: 80px;
+}
+
+.shell.shell-modern .main.main-internal .person-content-surface {
+  border: 0;
+  border-radius: 0;
+  padding-inline: 0;
+  background: transparent;
+}
+
+.shell.shell-modern .record-two .report-dashboard {
+  --report-sticky-top: calc(48px - var(--shell-content-top));
+}
+
+.shell.shell-modern .general-report-dashboard {
+  --report-sticky-top: calc(-1 * var(--shell-content-top));
+}
+
+.shell.shell-modern .main .person-record-navigation {
+  position: sticky;
+  top: calc(-1 * var(--shell-content-top));
+  z-index: 9;
+  height: 48px;
+  background: var(--surface);
+}
+
+.shell.shell-modern .main .person-record-navigation .person-tabs {
+  height: 48px;
+}
+
+.shell.shell-modern .main > .administration-tabs {
+  position: sticky;
+  top: calc(-1 * var(--shell-content-top));
+  z-index: 9;
+  height: 48px;
+  background: var(--surface);
+}
+
+.shell.shell-modern .report-dashboard-section {
+  scroll-margin-top: 112px;
+}
+
+@media (min-width: 701px) and (max-width: 1000px) {
+  .shell.shell-modern {
+    --sidebar-width: 212px;
+    --shell-content-top: 24px;
+  }
+  .shell.shell-modern .app-body > .main {
+    padding: var(--space-6);
+  }
+  .shell.shell-modern .topbar {
+    gap: var(--space-3);
+    padding-inline: var(--space-4);
+  }
+}
+
+@media (max-width: 700px) {
+  .shell.shell-modern {
+    padding-bottom: var(--space-2);
+    --shell-content-top: 24px;
+  }
+  .shell.shell-modern > .app-body,
+  .shell.shell-modern > .sidebar.collapsed + .app-body {
+    margin-left: 0;
+  }
+  .shell.shell-modern .topbar {
+    height: 56px;
+    gap: var(--space-2);
+    padding-inline: var(--space-3);
+  }
+  .shell.shell-modern .app-body > .main {
+    width: calc(100% - 16px);
+    margin: 0 var(--space-2);
+    height: calc(100dvh - 64px);
+    padding: var(--space-6) var(--space-4) var(--space-8);
+    border-radius: var(--radius);
+    scroll-margin-top: 64px;
+  }
+  .shell.shell-modern > .sidebar,
+  .shell.shell-modern > .sidebar.collapsed {
+    inset: 8px auto 8px 0;
+    width: var(--sidebar-mobile-width);
+    max-width: calc(100% - 48px);
+    padding: var(--space-3);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--shell-frame);
+  }
+  .shell.shell-modern .sidebar .nav-item {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell.shell-modern .sidebar .nav-item {
+    transition: none;
+  }
+}
+
+@media print {
+  html:has(.shell-modern), body:has(.shell-modern) { overflow: visible; }
+  .shell.shell-modern {
+    height: auto;
+    overflow: visible;
+    contain: none;
+    background: var(--surface-raised);
+    padding: 0;
+  }
+  .shell.shell-modern .app-body > .main {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}

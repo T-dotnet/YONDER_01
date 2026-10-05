@@ -1,0 +1,235 @@
+import { useState, useRef, useEffect } from "react";
+import {
+  Bell,
+  ChevronRight,
+  X,
+} from "lucide-react";
+import { useStore } from "../store";
+import { TODAY, formatDate } from "../model";
+import { getNotifications } from "../notifications";
+import { mvpPathwayEnabled } from "../mvpAssessmentPathway";
+import { Badge, FilterTabs } from "./UI";
+import { displayTerminology } from "../terminology.js";
+
+const CATEGORY_MAP = {
+  data_quality: {
+    label: "Data quality error",
+    shortLabel: "Data quality",
+    badgeClass: "coral",
+  },
+  assessment_overdue: {
+    label: "Measure overdue",
+    shortLabel: "Measure overdue",
+    badgeClass: "coral",
+  },
+  appointment_overdue: {
+    label: "Contact input overdue",
+    shortLabel: "Contact overdue",
+    badgeClass: "coral",
+  },
+  assessment_review: {
+    label: "Measure ready for review",
+    shortLabel: "Ready for review",
+    badgeClass: "purple",
+  },
+  assessment_outcome: {
+    label: "Assessment outcome needed",
+    shortLabel: "Record outcome",
+    badgeClass: "amber",
+  },
+  scheduled_review: {
+    label: "Scheduled review",
+    shortLabel: "Scheduled review",
+    badgeClass: "purple",
+  },
+};
+
+export default function NotificationBell({ navigate }) {
+  const { state } = useStore();
+  const [isOpen, setIsOpen] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const containerRef = useRef(null);
+
+  const notifications = getNotifications(state, TODAY);
+  const mvp = mvpPathwayEnabled(state.settings);
+  const activeFilter = !mvp && filter === "scheduled_review" ? "all" : filter;
+
+  const counts = {
+    all: notifications.length,
+    data_quality: notifications.filter((n) => n.category === "data_quality").length,
+    assessment_overdue: notifications.filter(
+      (n) => n.category === "assessment_overdue"
+    ).length,
+    appointment_overdue: notifications.filter(
+      (n) => n.category === "appointment_overdue"
+    ).length,
+    assessment_review: notifications.filter(
+      (n) => n.category === "assessment_review"
+    ).length,
+    assessment_outcome: notifications.filter(
+      (n) => n.category === "assessment_outcome"
+    ).length,
+    scheduled_review: notifications.filter(
+      (n) => n.category === "scheduled_review"
+    ).length,
+  };
+
+  const filteredNotifications =
+    activeFilter === "all"
+      ? notifications
+      : notifications.filter((n) => n.category === activeFilter);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const handleItemClick = (href) => {
+    setIsOpen(false);
+    navigate(href);
+  };
+
+  const tabs = [
+    { key: "all", label: "All", count: counts.all },
+    { key: "data_quality", label: "Data quality", count: counts.data_quality },
+    { key: "assessment_overdue", label: "Measure overdue", count: counts.assessment_overdue },
+    { key: "appointment_overdue", label: "Contact overdue", count: counts.appointment_overdue },
+    { key: "assessment_review", label: "Ready for review", count: counts.assessment_review },
+    { key: "assessment_outcome", label: "Record outcome", count: counts.assessment_outcome },
+    ...(mvp ? [{ key: "scheduled_review", label: "Scheduled reviews", count: counts.scheduled_review }] : []),
+  ];
+
+  return (
+    <div className="notification-bell-container" ref={containerRef}>
+      <button
+        type="button"
+        className={`icon-button notification-bell-btn ${isOpen ? "active" : ""}`}
+        aria-label={`Notifications (${notifications.length} item${notifications.length === 1 ? "" : "s"})`}
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+        title="Notifications"
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <Bell size={19} />
+        {notifications.length > 0 && (
+          <span className="notification-badge-dot">
+            {notifications.length > 99 ? "99+" : notifications.length}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <div
+          className="notification-popover"
+          role="dialog"
+          aria-label="Notifications panel"
+        >
+          <div className="notification-popover-header">
+            <div className="notification-popover-title">
+              <h3>Notifications</h3>
+              {notifications.length > 0 && (
+                <span className="notification-total-chip">
+                  {notifications.length} needing action
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="icon-button close-btn"
+              aria-label="Close notifications"
+              onClick={() => setIsOpen(false)}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <FilterTabs
+            id="notification"
+            label="Notification categories"
+            items={tabs.map((tab) => ({ value: tab.key, label: tab.label, count: tab.count }))}
+            value={activeFilter}
+            onChange={setFilter}
+            className="notification-category-tabs"
+            autoReveal
+            panelId="notification-panel"
+          />
+
+          <div
+            className="notification-list"
+            role="tabpanel"
+            id="notification-panel"
+            aria-labelledby={`notification-tab-${tabs.findIndex((tab) => tab.key === activeFilter)}`}
+          >
+            {filteredNotifications.length === 0 ? (
+              <div className="notification-empty">
+                <p>No notifications in this view.</p>
+              </div>
+            ) : (
+              filteredNotifications.map((item) => {
+                const categoryInfo = CATEGORY_MAP[item.category] || {
+                  label: item.categoryLabel,
+                  badgeClass: "neutral",
+                };
+                const displayDate = item.due
+                  ? formatDate(item.due)
+                  : item.submittedAt
+                    ? formatDate(item.submittedAt)
+                    : item.plannedDate
+                      ? formatDate(item.plannedDate)
+                      : null;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="notification-item"
+                    onClick={() => handleItemClick(item.href)}
+                  >
+                    <div className="notification-item-content">
+                      <div className="notification-item-header">
+                        <Badge tone={categoryInfo.badgeClass} className="notification-category-badge" showMark={false}>
+                          {displayTerminology(categoryInfo.label)}
+                        </Badge>
+                        {displayDate && (
+                          <span className="notification-item-date">{displayDate}</span>
+                        )}
+                      </div>
+                      <h4 className="notification-item-title">{displayTerminology(item.title)}</h4>
+                      <div className="notification-item-detail">{displayTerminology(item.detail)}</div>
+                    </div>
+                    <ChevronRight
+                      size={18}
+                      className="notification-item-arrow"
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

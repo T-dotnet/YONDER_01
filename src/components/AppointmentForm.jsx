@@ -1,0 +1,297 @@
+import { displayMeasureVersion } from '../terminology.js';
+import { LABELS } from "../terminology.js";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Search } from "lucide-react";
+import { ActionGroup, Field, Modal, Notice, Button, ValidatedForm, Checkbox } from "./UI";
+import {
+  APPOINTMENT_ATTENDANCE,
+  APPOINTMENT_DELIVERY_MODES,
+  CONTACT_RECIPIENTS,
+  CONTACT_TYPES,
+  appointmentMatchesCollectionDate,
+} from "../appointments";
+import { DEMO_STAFF, formatDate, practitionerServiceOptions, TODAY } from "../model";
+import { STANDARD_INSTRUMENTS } from "../instruments";
+import { measureEnabled } from '../catalogAvailability';
+import { contactsForAssessment } from "../assessmentContacts";
+import ContactFields from "./ContactFields";
+
+const formValues = (event) =>
+  Object.fromEntries(new FormData(event.currentTarget));
+
+export default function AppointmentForm({
+  episode,
+  people,
+  person,
+  recordTypes,
+  onChangeEventType,
+  error,
+  canCreateAssessment,
+  simpleAssessments = false,
+  scheduleAssessments = true,
+  assessmentSms = true,
+  phase2Mvp = false,
+  onClose,
+  onSave,
+}) {
+  const [attendance, setAttendance] = useState(scheduleAssessments ? "Planned" : "Attended");
+  const [contactMethod, setContactMethod] = useState("In person");
+  const [contactType, setContactType] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactNameEdited, setContactNameEdited] = useState(false);
+  const [recipientTypes, setRecipientTypes] = useState(["Young person"]);
+  const [recipientError, setRecipientError] = useState(false);
+  const [contactDate, setContactDate] = useState("");
+  const [collectionIds, setCollectionIds] = useState([]);
+  const [newAssessmentVersions, setNewAssessmentVersions] = useState([]);
+  const [assessmentMenuOpen, setAssessmentMenuOpen] = useState(false);
+  const [assessmentSearch, setAssessmentSearch] = useState("");
+  const assessmentPickerRef = useRef(null);
+  const assessmentSearchRef = useRef(null);
+  useEffect(() => {
+    if (!assessmentMenuOpen) return;
+    assessmentSearchRef.current?.focus();
+    const closeOnOutsideClick = (event) => {
+      if (!assessmentPickerRef.current?.contains(event.target))
+        setAssessmentMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [assessmentMenuOpen]);
+  const actualLatestDate =
+    episode.end && episode.end < TODAY ? episode.end : TODAY;
+  const practitionerServices = practitionerServiceOptions(people);
+  const primaryPractitioners = [...new Set([
+    ...DEMO_STAFF.filter((staff) => staff.role === "Clinician").map((staff) => staff.name),
+    ...(person?.episodes || []).flatMap((careEpisode) => (careEpisode.appointments || []).flatMap((item) => [
+      item.primaryPractitioner,
+      item.practitionerService?.includes(" · ") ? item.practitionerService.split(" · ")[0] : null,
+    ])),
+  ].filter(Boolean))];
+  const assessments = [...(episode.collections || [])].sort((a, b) =>
+    (b.due || "").localeCompare(a.due || ""));
+  const contactDates = {
+    plannedDate: contactDate,
+    actualDate: attendance === "Attended" ? contactDate : null,
+  };
+  const hasContactDate = Boolean(contactDate);
+  const assessmentAvailability = (collection) => {
+    if (["Cancelled", "Paused"].includes(collection.assignment)) return "Unavailable";
+    if (!hasContactDate) return "Choose a contact date";
+    if (!scheduleAssessments || !collection.due) return "Can link";
+    return appointmentMatchesCollectionDate(contactDates, collection)
+      ? "Matches contact date" : "Due on a different date";
+  };
+  const dueAssessments = assessments;
+  const searchTerm = assessmentSearch.trim().toLocaleLowerCase();
+  const visibleDueAssessments = dueAssessments.filter((collection) =>
+    `${collection.label} ${scheduleAssessments && collection.due ? `${collection.due} ${formatDate(collection.due)}` : ""}`.toLocaleLowerCase().includes(searchTerm));
+  const visibleInstruments = STANDARD_INSTRUMENTS.filter((instrument) =>
+    measureEnabled(instrument.version) && `${instrument.name} ${instrument.version}`.toLocaleLowerCase().includes(searchTerm));
+  const selectedCount = collectionIds.length + newAssessmentVersions.length;
+  const suggestedContactName = contactType
+    ? [contactType, attendance, contactMethod, recipientTypes.join(" + ")].filter(Boolean).join(" · ")
+    : "";
+
+  return (
+    <Modal
+      title={scheduleAssessments ? "Add contact" : "Record contact"}
+      subtitle={`Care episode ${episode.number} · ${formatDate(episode.start)}–${episode.end ? formatDate(episode.end) : "present"}`}
+      onClose={onClose}
+    >
+      <ValidatedForm
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (phase2Mvp && recipientTypes.length === 0) {
+            setRecipientError(true);
+            return;
+          }
+          const values = formValues(event);
+          onSave({
+            type: "ADD_APPOINTMENT",
+            ...values,
+            ...(phase2Mvp ? { recipientTypes, recipientType: recipientTypes[0] } : {}),
+            ...(attendance === "Attended" ? {
+              actualDate: values.plannedDate,
+              actualTime: values.plannedTime,
+              actualDurationMinutes: values.plannedDurationMinutes,
+            } : {}),
+            collectionIds: simpleAssessments ? [] : collectionIds,
+            newAssessmentVersions: simpleAssessments ? [] : newAssessmentVersions,
+          });
+        }}
+      >
+        <div className="form-body appointment-form">
+          {!phase2Mvp && <Notice>
+            {scheduleAssessments
+              ? "This record does not book an external contact or submit an approved PMHC-MDS record."
+              : "Record a contact that has already happened. This does not submit an approved PMHC-MDS record."}
+          </Notice>}
+          {!phase2Mvp && <Field label="Record category">
+            <select value="appointment" onChange={(event) => onChangeEventType(event.target.value)}>
+              {recordTypes.map((type) => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </select>
+          </Field>}
+          {phase2Mvp && <Field label="Direct contact type">
+            <select name="contactType" required value={contactType} onChange={(event) => setContactType(event.target.value)}>
+              <option value="" disabled>Choose contact type</option>
+              {CONTACT_TYPES.map((value) => <option key={value}>{value}</option>)}
+            </select>
+          </Field>}
+          {phase2Mvp && <Field label="Contact name">
+            <input name="contactName" value={contactNameEdited ? contactName : suggestedContactName} onChange={(event) => {
+              setContactName(event.target.value);
+              setContactNameEdited(true);
+            }} placeholder="Choose a contact type first" required />
+          </Field>}
+          <div className="form-grid">
+            <Field label="Contact status">
+              <select
+                name="attendance"
+                value={attendance}
+                onChange={(event) => setAttendance(event.target.value)}
+              >
+                {APPOINTMENT_ATTENDANCE.filter((value) => scheduleAssessments || value !== "Planned").map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label={LABELS.contactMethod}>
+              <select name="deliveryMode" required value={contactMethod} onChange={(event) => setContactMethod(event.target.value)}>
+                {APPOINTMENT_DELIVERY_MODES.filter((value) => assessmentSms || value !== "SMS").map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Date">
+              <input name="plannedDate" type="date" min={episode.start} max={attendance === "Attended" || !scheduleAssessments ? actualLatestDate : undefined} value={contactDate} onChange={(event) => setContactDate(event.target.value)} required />
+            </Field>
+            <Field label="Time">
+              <input name="plannedTime" type="time" required />
+            </Field>
+            {phase2Mvp && <Field label="Primary practitioner">
+              <select name="primaryPractitioner" defaultValue="">
+                <option value="">Choose practitioner</option>
+                {primaryPractitioners.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </Field>}
+            <Field label="Duration">
+              <input
+                name="plannedDurationMinutes"
+                type="number"
+                min="1"
+                max="600"
+                defaultValue="60"
+                required
+              />
+            </Field>
+            {phase2Mvp && <fieldset className="appointment-recipient-field">
+              <legend>Recipient</legend>
+              <div className="appointment-recipient-options">
+                {CONTACT_RECIPIENTS.map((value) => <Checkbox key={value} label={value}
+                  checked={recipientTypes.includes(value)}
+                  onChange={(event) => {
+                    setRecipientError(false);
+                    setRecipientTypes((current) => event.target.checked
+                      ? [...current, value]
+                      : current.filter((item) => item !== value));
+                  }} />)}
+              </div>
+              {recipientError && <small className="field-error">Choose at least one recipient.</small>}
+            </fieldset>}
+            {phase2Mvp && recipientTypes.includes("Related person") && <Field label="Related person name">
+              <input name="relatedPersonName" defaultValue={person?.family || ""} required={attendance === "Attended"} />
+            </Field>}
+            {!phase2Mvp && <Field label="Practitioner or service">
+              <select
+                name="practitionerService"
+                required
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Choose practitioner or service
+                </option>
+                {practitionerServices.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>}
+          </div>
+          <ContactFields attended={attendance === "Attended"} person={person} phase2Mvp={phase2Mvp} />
+          {!phase2Mvp && !simpleAssessments && <div className="appointment-assessment-picker" ref={assessmentPickerRef}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && assessmentMenuOpen) {
+                event.stopPropagation();
+                setAssessmentMenuOpen(false);
+              }
+            }}>
+            <span className="appointment-assessment-label" id="appointment-assessment-label">Associated measures (optional)</span>
+            <button type="button" className="appointment-assessment-trigger"
+              aria-labelledby="appointment-assessment-label appointment-assessment-value"
+              aria-expanded={assessmentMenuOpen}
+              aria-controls="appointment-assessment-options"
+              onClick={() => { setAssessmentMenuOpen((open) => !open); setAssessmentSearch(""); }}>
+              <span id="appointment-assessment-value">{selectedCount ? `${selectedCount} measure${selectedCount === 1 ? "" : "s"} selected` : "Choose measures"}</span>
+              <ChevronDown size={18} aria-hidden="true" />
+            </button>
+            {assessmentMenuOpen && <div className="appointment-assessment-dropdown" id="appointment-assessment-options">
+              <div className="appointment-assessment-search">
+                <Search size={17} aria-hidden="true" />
+                <input ref={assessmentSearchRef} type="search" value={assessmentSearch}
+                  onChange={(event) => setAssessmentSearch(event.target.value)}
+                  placeholder="Search measures" aria-label="Search measures" />
+              </div>
+              <div className="appointment-assessment-list">
+                <div className="appointment-assessment-group">
+                  <h3>Existing measures</h3>
+                  {visibleDueAssessments.length ? visibleDueAssessments.map((collection) => {
+                    const availability = assessmentAvailability(collection);
+                    const relatedCount = contactsForAssessment(episode, collection.id).length;
+                    const selected = collectionIds.includes(collection.id);
+                    return (
+                      <Checkbox className="appointment-assessment-option" key={collection.id}
+                        label={<><strong>{collection.label}</strong><small>{scheduleAssessments && collection.due ? `Due ${formatDate(collection.due)} · ` : ""}{availability}{relatedCount ? ` · ${relatedCount} related ${relatedCount === 1 ? "contact" : "contacts"}` : ""}</small></>}
+                        checked={selected} disabled={availability === "Unavailable"}
+                        onChange={(event) => {
+                            setCollectionIds((current) => event.target.checked
+                              ? [...current, collection.id]
+                              : current.filter((id) => id !== collection.id));
+                        }} />
+                    );
+                  }) : <p>{searchTerm ? "No matching measures." : "No measures are in this care episode."}</p>}
+                </div>
+                <div className="appointment-assessment-group">
+                  <h3>New measure</h3>
+                  <p>Selected measures will be created and linked when you save this contact.</p>
+                  {visibleInstruments.map((instrument) => (
+                    <Checkbox className="appointment-assessment-option" key={instrument.version}
+                      label={<><strong>{instrument.name}</strong><small>{displayMeasureVersion(instrument.version)}</small></>}
+                      checked={newAssessmentVersions.includes(instrument.version)} disabled={!canCreateAssessment}
+                      onChange={(event) => setNewAssessmentVersions((current) => event.target.checked
+                          ? [...current, instrument.version]
+                          : current.filter((version) => version !== instrument.version))} />
+                  ))}
+                  {visibleInstruments.length === 0 && <p>No matching new measures.</p>}
+                  {!canCreateAssessment && <p>Complete intake before planning a new measure.</p>}
+                </div>
+              </div>
+            </div>}
+          </div>}
+          {error && <p className="field-error">{error}</p>}
+        </div>
+        <ActionGroup className="modal-footer">
+          <Button type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary">
+            {scheduleAssessments ? "Save contact record" : "Record contact"}
+          </Button>
+        </ActionGroup>
+      </ValidatedForm>
+    </Modal>
+  );
+}

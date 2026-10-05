@@ -1,0 +1,79 @@
+import { LABELS } from "../terminology.js";
+import { formatDate, formatTimestamp } from "../model";
+import { getInstrument, questionnaireState } from "../instruments";
+import { sessionAnswerCounts, sessionContribution } from "../responseSessions";
+import { Badge } from "./UI";
+import StandardTable from "./StandardTable";
+
+const headings = ["Attempt / session times", "Delivery contact", "Status / outcome", LABELS.collectionMethod, "Contribution"];
+
+function contactLabel(contact) {
+  return contact?.contactType || contact?.appointmentType || contact?.practitionerService || "Service contact";
+}
+
+export default function DeliveryAttemptsTable({ collection, contacts = [] }) {
+  const attempts = collection.attempts || [];
+  if (!attempts.length) return null;
+
+  const draft = collection.response === "Draft";
+  const instrument = getInstrument(collection.version);
+  const counts = sessionAnswerCounts(collection, instrument, draft);
+  const totalAnswers = questionnaireState(instrument, draft ? collection.draftAnswers : collection.answers).total;
+  const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
+
+  return (
+    <StandardTable label="Delivery attempts" responsive={false} density="compact" className="delivery-attempts-table">
+      <thead><tr>
+        {headings.map((heading) => <th scope="col" key={heading}>{heading}</th>)}
+      </tr></thead>
+      <tbody>{attempts.map((attempt, index) => {
+        const contactId = attempt.appointmentId ||
+          (attempt.id === collection.submittedAttemptId ? collection.submittedAppointmentId : null);
+        const contact = contactById.get(contactId);
+        const contribution = sessionContribution(collection, attempt, counts);
+        const assistance = attempt.assistance ||
+          (attempt.id === collection.submittedAttemptId ? collection.assistance : null);
+        const notStarted = !attempt.startedAt &&
+          (attempt.status?.startsWith("Prepared") || attempt.status?.startsWith("Ready to begin"));
+        const values = [
+          <span className="delivery-attempt-cell-stack">
+            <strong>{attempt.date ? formatDate(attempt.date) : "Date not recorded"}</strong>
+            <span>Attempt {index + 1}</span>
+            {attempt.preparedAt && <span>Prepared: {formatTimestamp(attempt.preparedAt)}</span>}
+            {notStarted && <span>Session not started</span>}
+            {attempt.startedAt && <span>Started: {formatTimestamp(attempt.startedAt)}</span>}
+            {attempt.endedAt && <span>Ended: {formatTimestamp(attempt.endedAt)}</span>}
+          </span>,
+          <span className="delivery-attempt-cell-stack">
+            <strong>{contact ? contactLabel(contact) : "None linked"}</strong>
+            {contact && <span>{formatDate(contact.actualDate || contact.plannedDate)}</span>}
+            {attempt.externalAppointment && <span>
+              External: {formatDate(attempt.externalAppointment.date)} · {attempt.externalAppointment.time} · {attempt.externalAppointment.practitionerService} · {attempt.externalAppointment.deliveryMode}
+            </span>}
+          </span>,
+          collection.response === "Submitted" && attempt.id === collection.submittedAttemptId
+            ? "Response submitted"
+            : attempt.status || "Not recorded",
+          <span className="delivery-attempt-cell-stack">
+            <strong>{attempt.channel || "Not recorded"}</strong>
+            {assistance && <span>Assistance: {assistance}</span>}
+            {attempt.recorderName && <span>Recorded by {attempt.recorderName}</span>}
+          </span>,
+          <span className="related-records-contribution">
+            <Badge tone={contribution.status === "Completed" ? "green" : contribution.status === "Partial" ? "amber" : "neutral"}>
+              {contribution.status}
+            </Badge>
+            <span>{contribution.answerCount} / {totalAnswers} answers</span>
+          </span>,
+        ];
+        return (
+          <tr key={attempt.id}>
+            {values.map((value, cellIndex) => (
+              <td data-label={headings[cellIndex]} key={headings[cellIndex]}>{value}</td>
+            ))}
+          </tr>
+        );
+      })}</tbody>
+    </StandardTable>
+  );
+}
