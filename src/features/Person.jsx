@@ -69,7 +69,6 @@ import ListFilterBar from "../components/ListFilterBar";
 import TimelineExpandAll from "../components/TimelineExpandAll";
 import { currentCarePeriod, previousDate, PROGRAM_STREAMS } from "../carePeriods";
 import Timeline, {
-  ChangeLog,
   ClinicalHistory,
 } from "../components/ActivityTimeline";
 import { assessmentScoreLabel, assessmentTypeGroups, linkedAssessmentScore, prioritizeSimpleAssessmentGroups, simpleAssessmentDate } from "../assessmentGroups";
@@ -207,7 +206,6 @@ export default function Person({ id, navigate, openModal }) {
     ...(canAccess(state, 'view_report', { person: sourcePerson }) ? [{ value: "Report", label: mvpAssessments ? "Reports" : "Report" }] : []),
     ...(!mvpAssessments ? [{ value: "Consent & respondents", label: "Consent" }] : []),
     "History",
-    ...(canAccess(state, 'view_change_log', { person: sourcePerson }) ? ["Change log"] : []),
   ].filter(item => roleCanSeeTab(state.settings, accessUser.role, typeof item === 'string' ? item : item.value));
   // Referral links open their workflow outside the record tab bar.
   const contextualView = ["Referrals"].find(
@@ -1886,20 +1884,6 @@ export default function Person({ id, navigate, openModal }) {
               person={p}
               audit={state.audit}
             />
-          </div>
-        )}
-        {tab === "Change log" && (
-          <div className="stack person-record-plain">
-            <div className="section-toolbar">
-              <div>
-                <h2>Change log</h2>
-                <p>
-                  Field-level record of who changed what in this care episode. Use Show more
-                  to view the before and after values.
-                </p>
-              </div>
-            </div>
-            <ChangeLog episode={e} person={p} audit={state.audit} />
           </div>
         )}
       </div>
