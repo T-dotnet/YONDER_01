@@ -8,6 +8,10 @@ test('new workspaces start with the MVP preset', () => {
   assert.equal(mvpPresetActive(settings), true);
   for (const [key, value] of Object.entries(MVP_PRESET))
     assert.equal(settings[key], value, key);
+  for (const key of ['showGeneralReport', 'phase2CareActivity', 'mvpSeparateMeasuresContacts', 'mvpCarePointActions', 'packBasedRecordOutcomes'])
+    assert.equal(settings[key], true, `${key} should start on`);
+  assert.equal(settings.mvpShowPersonTags, false);
+  assert.equal(settings.assessmentSms, false);
 });
 
 test('MVP preset saves the requested switches in one action', () => {
@@ -29,7 +33,7 @@ test('MVP preset saves the requested switches in one action', () => {
   };
   const after = reducer(before, { type: 'APPLY_MVP_PRESET' });
   assert.equal(mvpPresetActive(after.settings), true);
-  assert.equal(after.settings.phase2CareActivity, false);
+  assert.equal(after.settings.phase2CareActivity, true);
   assert.equal(after.settings.assessmentSms, false);
   assert.equal(after.settings.mvpSchedulePresets, false);
   for (const [key, value] of Object.entries(MVP_PRESET))
@@ -61,18 +65,18 @@ test('Care point heading starts off and the MVP preset restores it to off', () =
 test('Care point heading and actions can be changed independently', () => {
   const workspace = createDefaultWorkspace();
   const headingOn = reducer(workspace, { type: 'SET_MVP_CARE_POINT_HEADING', enabled: true });
-  assert.equal(headingOn.settings.mvpCarePointActions, false);
-  const actionsOn = reducer(headingOn, { type: 'SET_MVP_CARE_POINT_ACTIONS', enabled: true });
-  assert.equal(actionsOn.settings.mvpCarePointHeading, true);
-  assert.equal(actionsOn.settings.mvpCarePointActions, true);
-  const headingOff = reducer(actionsOn, { type: 'SET_MVP_CARE_POINT_HEADING', enabled: false });
-  assert.equal(headingOff.settings.mvpCarePointActions, true);
+  assert.equal(headingOn.settings.mvpCarePointActions, true);
+  const actionsOff = reducer(headingOn, { type: 'SET_MVP_CARE_POINT_ACTIONS', enabled: false });
+  assert.equal(actionsOff.settings.mvpCarePointHeading, true);
+  assert.equal(actionsOff.settings.mvpCarePointActions, false);
+  const headingOff = reducer(actionsOff, { type: 'SET_MVP_CARE_POINT_HEADING', enabled: false });
+  assert.equal(headingOff.settings.mvpCarePointActions, false);
   const restored = reducer(headingOff, { type: 'APPLY_MVP_PRESET' });
   assert.equal(restored.settings.mvpCarePointHeading, false);
-  assert.equal(restored.settings.mvpCarePointActions, false);
+  assert.equal(restored.settings.mvpCarePointActions, true);
   const legacy = { ...workspace, settings: { ...workspace.settings, mvpCarePointActions: undefined } };
-  const legacyHeadingOff = reducer(legacy, { type: 'SET_MVP_CARE_POINT_HEADING', enabled: false });
-  assert.equal(legacyHeadingOff.settings.mvpCarePointActions, undefined);
+  const legacyHeadingOff = reducer(legacy, { type: 'SET_MVP_CARE_POINT_HEADING', enabled: true });
+  assert.equal(legacyHeadingOff.settings.mvpCarePointActions, false);
 });
 
 test('MVP preset keeps Record outcome below the table', () => {
